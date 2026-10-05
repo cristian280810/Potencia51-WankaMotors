@@ -1440,6 +1440,19 @@ th.col-vin {
 </style>
 
 <style>
+
+/* Factura adicional: detalle de artículos */
+.adicional-items-box{grid-column:1 / -1;border:1px solid #dbe2ea;border-radius:10px;background:#f8fafc;padding:12px;margin-top:2px;}
+.adicional-items-head{display:grid;grid-template-columns:minmax(180px,1fr) 90px 120px 120px 42px;gap:8px;align-items:center;margin-bottom:7px;font-size:12px;font-weight:700;color:#374151;}
+.adicional-item-row{display:grid;grid-template-columns:minmax(180px,1fr) 90px 120px 120px 42px;gap:8px;align-items:center;margin-bottom:8px;}
+.adicional-item-row input{width:100%;box-sizing:border-box;}
+.adicional-item-total{height:38px;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;border:1px solid #d1d5db;border-radius:7px;background:#f3f4f6;font-weight:700;white-space:nowrap;}
+.adicional-item-add,.adicional-item-remove{width:38px;height:38px;border-radius:8px;border:1px solid #cbd5e1;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;cursor:pointer;}
+.adicional-item-add{background:#eef4ff;color:#1d4ed8;border-color:#bfdbfe;}
+.adicional-item-remove{background:#fff1f2;color:#dc2626;border-color:#fecdd3;}
+.adicional-items-footer{display:flex;justify-content:flex-end;margin-top:4px;font-size:12px;color:#6b7280;}
+@media(max-width:700px){.adicional-items-head{display:none}.adicional-item-row{grid-template-columns:1fr 80px 105px 105px 38px;}.adicional-items-box{padding:9px;}}
+
 /* Facturas emitidas: evitar saltos de línea en fechas y montos */
 .facturas-emitidas-nowrap{
   white-space:nowrap !important;
@@ -2304,7 +2317,13 @@ onclick="limpiarFormulario()">
       <div class="form-group"><label>Fecha de emisión *</label><input id="adicionalFacturaEmision" type="date"></div>
       <div class="form-group"><label>Fecha de vencimiento</label><input id="adicionalFacturaVencimiento" type="date"></div>
       <div class="form-group"><label>Concepto / cargo por cobrar *</label><input id="adicionalFacturaConcepto" type="text" placeholder="Ej.: Reembolso de gasto, penalidad, alquiler, etc."></div>
-      <div class="form-group"><label>Subtotal sin IGV *</label><input id="adicionalFacturaSubtotal" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcularFacturaAdicional()"></div>
+      <div class="adicional-items-box">
+        <div style="font-weight:700;color:#111827;margin-bottom:8px;">🧾 Detalle de artículos / cargos</div>
+        <div class="adicional-items-head"><span>Artículo / descripción</span><span>Cantidad</span><span>Precio unitario</span><span>Importe</span><span></span></div>
+        <div id="adicionalFacturaItems"></div>
+        <div class="adicional-items-footer">El subtotal se calcula automáticamente sumando los artículos.</div>
+      </div>
+      <div class="form-group"><label>Subtotal sin IGV *</label><input id="adicionalFacturaSubtotal" type="number" min="0" step="0.01" placeholder="0.00" readonly style="background:#f3f4f6;cursor:not-allowed;"></div>
       <div class="form-group"><label>IGV (18%)</label><input id="adicionalFacturaIgv" type="text" readonly value="S/ 0.00" style="background:#f3f4f6;cursor:not-allowed;"></div>
       <div class="form-group"><label>Total con IGV</label><input id="adicionalFacturaTotal" type="text" readonly value="S/ 0.00" style="background:#f3f4f6;cursor:not-allowed;font-weight:700;"></div>
       <div class="form-group"><label>Observaciones</label><input id="adicionalFacturaObservaciones" type="text" placeholder="Opcional"></div>
@@ -7806,6 +7825,8 @@ function abrirModalFacturaAdicional(){
   document.getElementById("adicionalFacturaVencimiento").value="";
   document.getElementById("adicionalFacturaConcepto").value="";
   document.getElementById("adicionalFacturaSubtotal").value="";
+  document.getElementById("adicionalFacturaItems").innerHTML="";
+  agregarItemFacturaAdicional();
   document.getElementById("adicionalFacturaIgv").value="S/ 0.00";
   document.getElementById("adicionalFacturaTotal").value="S/ 0.00";
   document.getElementById("adicionalFacturaObservaciones").value="";
@@ -7831,8 +7852,59 @@ function actualizarRucFacturaAdicional(){
   ruc.value=opcion ? (opcion.getAttribute("data-ruc") || "") : "";
 }
 
+function agregarItemFacturaAdicional(){
+  const contenedor=document.getElementById("adicionalFacturaItems");
+  if(!contenedor) return;
+  const row=document.createElement("div");
+  row.className="adicional-item-row";
+  row.innerHTML=`
+    <input type="text" class="adicional-item-descripcion" placeholder="Ej.: Lavado, repuesto, insumo...">
+    <input type="number" class="adicional-item-cantidad" min="0.01" step="0.01" value="1" oninput="calcularFacturaAdicional()">
+    <input type="number" class="adicional-item-precio" min="0" step="0.01" placeholder="0.00" oninput="calcularFacturaAdicional()">
+    <div class="adicional-item-total">S/ 0.00</div>
+    <button type="button" class="adicional-item-add" title="Agregar artículo" onclick="agregarItemFacturaAdicional()">+</button>`;
+  contenedor.appendChild(row);
+  calcularFacturaAdicional();
+}
+
+function eliminarItemFacturaAdicional(btn){
+  const contenedor=document.getElementById("adicionalFacturaItems");
+  if(!contenedor) return;
+  const filas=contenedor.querySelectorAll(".adicional-item-row");
+  if(filas.length<=1){
+    const fila=btn.closest(".adicional-item-row");
+    if(fila){
+      fila.querySelector(".adicional-item-descripcion").value="";
+      fila.querySelector(".adicional-item-cantidad").value="1";
+      fila.querySelector(".adicional-item-precio").value="";
+    }
+  }else{
+    btn.closest(".adicional-item-row").remove();
+  }
+  calcularFacturaAdicional();
+}
+
 function calcularFacturaAdicional(){
-  const subtotal=Math.max(0,Number(document.getElementById("adicionalFacturaSubtotal").value||0));
+  const filas=[...document.querySelectorAll("#adicionalFacturaItems .adicional-item-row")];
+  let subtotal=0;
+  filas.forEach((fila,i)=>{
+    const cantidad=Math.max(0,Number(fila.querySelector(".adicional-item-cantidad")?.value||0));
+    const precio=Math.max(0,Number(fila.querySelector(".adicional-item-precio")?.value||0));
+    const importe=Number((cantidad*precio).toFixed(2));
+    subtotal+=importe;
+    const totalEl=fila.querySelector(".adicional-item-total");
+    if(totalEl) totalEl.textContent="S/ "+importe.toFixed(2);
+    const boton=fila.querySelector(".adicional-item-add");
+    if(boton){
+      boton.className=filas.length===1 || i===filas.length-1 ? "adicional-item-add" : "adicional-item-remove";
+      boton.textContent=filas.length===1 || i===filas.length-1 ? "+" : "−";
+      boton.title=filas.length===1 || i===filas.length-1 ? "Agregar artículo" : "Eliminar artículo";
+      boton.onclick=filas.length===1 || i===filas.length-1 ? agregarItemFacturaAdicional : function(){eliminarItemFacturaAdicional(this);};
+    }
+  });
+  subtotal=Number(subtotal.toFixed(2));
+  const subtotalInput=document.getElementById("adicionalFacturaSubtotal");
+  if(subtotalInput) subtotalInput.value=subtotal.toFixed(2);
   const igv=Number((subtotal*0.18).toFixed(2));
   const total=Number((subtotal+igv).toFixed(2));
   const det=calcularDetraccionFactura(total);
@@ -7845,13 +7917,26 @@ function calcularFacturaAdicional(){
     : "No se aplica detracción automática porque el total no supera S/ 700.";
 }
 
+
 async function guardarFacturaAdicional(){
   const numero=document.getElementById("adicionalFacturaNumero").value.trim().toUpperCase();
   const cliente=document.getElementById("adicionalFacturaCliente").value.trim();
   const fechaEmision=document.getElementById("adicionalFacturaEmision").value;
   const fechaVencimiento=document.getElementById("adicionalFacturaVencimiento").value || null;
   const concepto=document.getElementById("adicionalFacturaConcepto").value.trim();
-  const subtotal=Math.max(0,Number(document.getElementById("adicionalFacturaSubtotal").value||0));
+  const filas=[...document.querySelectorAll("#adicionalFacturaItems .adicional-item-row")];
+  const items=filas.map((fila,i)=>({
+    descripcion:fila.querySelector(".adicional-item-descripcion")?.value.trim()||"",
+    cantidad:Math.max(0,Number(fila.querySelector(".adicional-item-cantidad")?.value||0)),
+    precio_unitario:Math.max(0,Number(fila.querySelector(".adicional-item-precio")?.value||0))
+  })).filter(x=>x.descripcion || x.precio_unitario>0);
+  if(!items.length){
+    mostrarAlerta("Agrega al menos un artículo con descripción y precio unitario.","error");
+    return;
+  }
+  const subtotal=Number(items.reduce((s,x)=>s+(x.cantidad*x.precio_unitario),0).toFixed(2));
+  const detalleItems=items.map((x,i)=>`${i+1}. ${x.descripcion} | Cantidad: ${x.cantidad} | Precio unitario: S/ ${x.precio_unitario.toFixed(2)} | Importe: S/ ${(x.cantidad*x.precio_unitario).toFixed(2)}`).join("\n");
+  const conceptoGuardado=concepto ? `${concepto}\n${detalleItems}` : detalleItems;
   const observaciones=document.getElementById("adicionalFacturaObservaciones").value.trim();
   const archivo=document.getElementById("adicionalFacturaArchivo").files[0] || null;
   if(!numero || !cliente || !fechaEmision || !concepto || subtotal<=0){
@@ -7887,7 +7972,7 @@ async function guardarFacturaAdicional(){
         fecha_detraccion:null,
         estado_detraccion:detraccion.aplica ? "Pendiente" : "No aplica",
         tipo_factura:"Adicional",
-        concepto_adicional:concepto
+        concepto_adicional:conceptoGuardado
       })
     });
     if(!respuesta.ok) throw new Error("No se pudo crear la factura adicional: "+await respuesta.text());
