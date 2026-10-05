@@ -2259,6 +2259,7 @@ onclick="limpiarFormulario()">
         <input id="nuevaFacturaRuc" type="text" readonly placeholder="Se completa automáticamente" style="background:#f3f4f6;cursor:not-allowed;">
       </div>
       <div class="form-group"><label>Fecha de emisión *</label><input id="nuevaFacturaEmision" type="date"></div>
+      <div class="form-group"><label>Mes al que pertenece la factura *</label><input id="nuevaFacturaPeriodo" type="month" title="Mes al que corresponde la factura para reportes y facturación mensual"><small style="display:block;margin-top:5px;color:#6b7280;">Puede ser distinto al mes de emisión. Ej.: emisión octubre, corresponde a septiembre.</small></div>
       <div class="form-group"><label>Fecha de vencimiento</label><input id="nuevaFacturaVencimiento" type="date"></div>
       <div class="form-group"><label>Estado inicial</label><input id="nuevaFacturaEstadoPago" type="text" value="Pendiente" readonly></div>
       <div class="form-group"><label>Observaciones</label><input id="nuevaFacturaObservaciones" type="text" placeholder="Opcional"></div>
@@ -2315,6 +2316,7 @@ onclick="limpiarFormulario()">
         <input id="adicionalFacturaRuc" type="text" readonly placeholder="Se completa automáticamente" style="background:#f3f4f6;cursor:not-allowed;">
       </div>
       <div class="form-group"><label>Fecha de emisión *</label><input id="adicionalFacturaEmision" type="date"></div>
+      <div class="form-group"><label>Mes al que pertenece la factura *</label><input id="adicionalFacturaPeriodo" type="month" title="Mes al que corresponde la factura para reportes y facturación mensual"><small style="display:block;margin-top:5px;color:#6b7280;">Puede ser distinto al mes de emisión. Ej.: emisión octubre, corresponde a septiembre.</small></div>
       <div class="form-group"><label>Fecha de vencimiento</label><input id="adicionalFacturaVencimiento" type="date"></div>
       <div class="form-group"><label>Concepto / cargo por cobrar *</label><input id="adicionalFacturaConcepto" type="text" placeholder="Ej.: Reembolso de gasto, penalidad, alquiler, etc."></div>
       <div class="adicional-items-box">
@@ -7798,6 +7800,7 @@ function abrirModalNuevaFactura(){
   document.getElementById("nuevaFacturaCliente").value="";
   document.getElementById("nuevaFacturaRuc").value="";
   document.getElementById("nuevaFacturaEmision").value=fechaHoy;
+  document.getElementById("nuevaFacturaPeriodo").value=fechaHoy.slice(0,7);
   document.getElementById("nuevaFacturaVencimiento").value="";
   document.getElementById("nuevaFacturaEstadoPago").value="Pendiente";
   document.getElementById("nuevaFacturaObservaciones").value="";
@@ -7822,6 +7825,7 @@ function abrirModalFacturaAdicional(){
   document.getElementById("adicionalFacturaCliente").value="";
   document.getElementById("adicionalFacturaRuc").value="";
   document.getElementById("adicionalFacturaEmision").value=fechaHoy;
+  document.getElementById("adicionalFacturaPeriodo").value=fechaHoy.slice(0,7);
   document.getElementById("adicionalFacturaVencimiento").value="";
   document.getElementById("adicionalFacturaConcepto").value="";
   document.getElementById("adicionalFacturaSubtotal").value="";
@@ -7922,6 +7926,7 @@ async function guardarFacturaAdicional(){
   const numero=document.getElementById("adicionalFacturaNumero").value.trim().toUpperCase();
   const cliente=document.getElementById("adicionalFacturaCliente").value.trim();
   const fechaEmision=document.getElementById("adicionalFacturaEmision").value;
+  const periodoFactura=document.getElementById("adicionalFacturaPeriodo").value;
   const fechaVencimiento=document.getElementById("adicionalFacturaVencimiento").value || null;
   const concepto=document.getElementById("adicionalFacturaConcepto").value.trim();
   const filas=[...document.querySelectorAll("#adicionalFacturaItems .adicional-item-row")];
@@ -7939,8 +7944,8 @@ async function guardarFacturaAdicional(){
   const conceptoGuardado=concepto ? `${concepto}\n${detalleItems}` : detalleItems;
   const observaciones=document.getElementById("adicionalFacturaObservaciones").value.trim();
   const archivo=document.getElementById("adicionalFacturaArchivo").files[0] || null;
-  if(!numero || !cliente || !fechaEmision || !concepto || subtotal<=0){
-    mostrarAlerta("Completa número de factura, cliente, fecha, concepto y un subtotal mayor a 0.","error");
+  if(!numero || !cliente || !fechaEmision || !periodoFactura || !concepto || subtotal<=0){
+    mostrarAlerta("Completa número de factura, cliente, fecha de emisión, mes al que pertenece, concepto y un subtotal mayor a 0.","error");
     return;
   }
   const igv=Number((subtotal*0.18).toFixed(2));
@@ -7956,6 +7961,7 @@ async function guardarFacturaAdicional(){
       body:JSON.stringify({
         numero_factura:numero,
         fecha_emision:fechaEmision,
+        periodo_facturacion:periodoFactura+"-01",
         fecha_vencimiento:fechaVencimiento,
         cliente:cliente,
         subtotal_sin_igv:Number(subtotal.toFixed(2)),
@@ -8030,12 +8036,13 @@ async function guardarNuevaFactura(){
   const cliente=document.getElementById("nuevaFacturaCliente").value.trim();
   const rucCliente=document.getElementById("nuevaFacturaRuc").value.trim();
   const fechaEmision=document.getElementById("nuevaFacturaEmision").value;
+  const periodoFactura=document.getElementById("nuevaFacturaPeriodo").value;
   const fechaVencimiento=document.getElementById("nuevaFacturaVencimiento").value || null;
   const observaciones=document.getElementById("nuevaFacturaObservaciones").value.trim();
   const archivo=document.getElementById("nuevaFacturaArchivo").files[0] || null;
 
-  if(!numero || !cliente || !rucCliente || !fechaEmision){
-    mostrarAlerta("Completa número de factura, selecciona un cliente y verifica la fecha de emisión.","error");
+  if(!numero || !cliente || !rucCliente || !fechaEmision || !periodoFactura){
+    mostrarAlerta("Completa número de factura, selecciona un cliente, fecha de emisión y mes al que pertenece la factura.","error");
     return;
   }
 
@@ -8065,6 +8072,7 @@ async function guardarNuevaFactura(){
       body:JSON.stringify({
         numero_factura:numero,
         fecha_emision:fechaEmision,
+        periodo_facturacion:periodoFactura+"-01",
         fecha_vencimiento:fechaVencimiento,
         cliente:cliente,
         subtotal_sin_igv:Number(resumen.sinIgv.toFixed(2)),
@@ -8161,7 +8169,7 @@ const FACTURAS_EMITIDAS_POR_PAGINA=40;
 
 async function cargarFacturasEmitidas(){
   const headers={"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY};
-  const selectCompleto="id,numero_factura,fecha_emision,fecha_vencimiento,cliente,subtotal_sin_igv,igv,total_con_igv,estado_pago,estado_factura,tipo_factura,concepto_adicional,fecha_pago,observaciones,created_at,archivo_factura,aplica_detraccion,numero_nota_credito,archivo_nota_credito,motivo_anulacion,fecha_anulacion,porcentaje_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion";
+  const selectCompleto="id,numero_factura,fecha_emision,periodo_facturacion,fecha_vencimiento,cliente,subtotal_sin_igv,igv,total_con_igv,estado_pago,estado_factura,tipo_factura,concepto_adicional,fecha_pago,observaciones,created_at,archivo_factura,aplica_detraccion,numero_nota_credito,archivo_nota_credito,motivo_anulacion,fecha_anulacion,porcentaje_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion";
   const selectCompatible="id,numero_factura,fecha_emision,fecha_vencimiento,cliente,subtotal_sin_igv,igv,total_con_igv,estado_pago,estado_factura,fecha_pago,observaciones,created_at,archivo_factura,aplica_detraccion,numero_nota_credito,archivo_nota_credito,motivo_anulacion,fecha_anulacion,porcentaje_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion";
   let respuesta=await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors?select="+encodeURIComponent(selectCompleto)+"&order=fecha_emision.desc,created_at.desc",{method:"GET",headers,cache:"no-store"});
   let modoCompatible=false;
@@ -9359,7 +9367,7 @@ let detallesFacturasDashboard = [];
 
 async function cargarFacturasDashboard(){
   const headers={"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY};
-  const respuesta = await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion&order=fecha_emision.asc,created_at.asc",{
+  const respuesta = await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,periodo_facturacion,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion&order=fecha_emision.asc,created_at.asc",{
     method:"GET",headers:headers,cache:"no-store"
   });
   if(!respuesta.ok) throw new Error("No se pudieron cargar las facturas del Dashboard: "+await respuesta.text());
@@ -9391,10 +9399,25 @@ function estadoDashboardVehiculo(r){
   return {texto:"Facturado - Pendiente de pago",clase:"facturado-pendiente",factura:numeroFactura};
 }
 
+function filtrarFacturasFacturacionMensualDashboard(desde,hasta){
+  return (facturasDashboard||[]).filter(function(f){
+    const periodo=String(f.periodo_facturacion||f.fecha_emision||"").slice(0,10);
+    const estadoFactura=String(f.estado_factura||"Vigente").trim().toLowerCase();
+    const estadoPago=String(f.estado_pago||"").trim().toLowerCase();
+    const anulada = estadoFactura === "anulada" || estadoPago === "anulada";
+    return !anulada && (!desde || periodo>=desde) && (!hasta || periodo<=hasta);
+  });
+}
+
 function filtrarFacturasDashboard(desde,hasta){
   return (facturasDashboard||[]).filter(function(f){
     const fecha=String(f.fecha_emision||"").slice(0,10);
-    return (!desde || fecha>=desde) && (!hasta || fecha<=hasta);
+    const estadoFactura=String(f.estado_factura||"Vigente").trim().toLowerCase();
+    const estadoPago=String(f.estado_pago||"").trim().toLowerCase();
+    const anulada = estadoFactura === "anulada" || estadoPago === "anulada";
+    // Incluye todas las facturas de la tabla facturas_wankamotors,
+    // tanto de WankaMotors como de Multimarkas, y excluye las anuladas.
+    return !anulada && (!desde || fecha>=desde) && (!hasta || fecha<=hasta);
   });
 }
 
@@ -9569,10 +9592,10 @@ function renderGraficasDashboard(lista){
   // La facturación mensual es global respecto a marca, servicio y tipo,
   // pero sí respeta el rango de fechas seleccionado en el Dashboard.
   const tiposSeleccionadosDashboard=obtenerSeleccionDashboard('tipo');
-  const facturas=filtrarFacturasDashboard(desde,hasta);
+  const facturas=filtrarFacturasFacturacionMensualDashboard(desde,hasta);
   const porMesFacturacion={};
   facturas.forEach(function(f){
-    const clave=String(f.fecha_emision||"").slice(0,7);
+    const clave=String(f.periodo_facturacion||f.fecha_emision||"").slice(0,7);
     if(!clave) return;
     if(!porMesFacturacion[clave]) porMesFacturacion[clave]=0;
     porMesFacturacion[clave]+=Number(f.total_con_igv||0);
@@ -9613,7 +9636,7 @@ function renderGraficasDashboard(lista){
   </div>
   <div class="dashboard-grafica-panel" style="margin-top:20px">
     <h3>💵 Facturación total por mes</h3>
-    <div class="dashboard-grafica-subtitulo">Total facturado por fecha de emisión.</div>
+    <div class="dashboard-grafica-subtitulo">Total facturado por fecha de emisión (WankaMotors + Multimarkas, sin anuladas).</div>
     ${clavesFact.length ? `<div class="dashboard-monto-mes" style="display:flex;flex-direction:row;align-items:flex-end;justify-content:center;gap:18px;min-height:250px;padding:12px 10px 4px;overflow-x:auto">${barrasFact}</div>` : '<div class="dashboard-vacio">No hay facturas emitidas en el periodo seleccionado.</div>'}
   </div>`;
 }
@@ -9894,7 +9917,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V7.0 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
