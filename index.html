@@ -899,6 +899,35 @@ th.col-vin {
 }
 
 
+
+/* Control tipo pestaña para mostrar/ocultar filtros de Regularizar registros */
+.filtros-pasados-toggle-wrap{
+  margin:14px 0 10px;
+  display:flex;
+  justify-content:flex-start;
+}
+.filtros-pasados-toggle{
+  min-width:170px !important;
+  padding:9px 15px !important;
+  background:#fff !important;
+  color:#334155 !important;
+  border:1px solid #cbd5e1 !important;
+  border-radius:8px !important;
+  box-shadow:none !important;
+  font-size:13px !important;
+  font-weight:600 !important;
+  cursor:pointer;
+  transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;
+}
+.filtros-pasados-toggle:hover{
+  background:#f8fafc !important;
+  border-color:#94a3b8 !important;
+  box-shadow:0 1px 3px rgba(15,23,42,.08) !important;
+}
+.filtros-pasados.oculto{
+  display:none;
+}
+
 /* Paginación de Regularizar registros */
 .paginacion-pasados{margin:16px 0 8px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;text-align:center;}
 .paginacion-info{margin-bottom:10px;color:#4b5563;font-size:13px;font-weight:600;}
@@ -2338,7 +2367,13 @@ onclick="buscarRegistroPasado()">
 
 </div>
 
-<div class="filtros-pasados">
+<div class="filtros-pasados-toggle-wrap">
+  <button type="button" id="btnToggleFiltrosPasados" class="btn btn-secondary filtros-pasados-toggle" onclick="toggleFiltrosPasados()">
+    🔽 Ocultar filtros
+  </button>
+</div>
+
+<div class="filtros-pasados" id="panelFiltrosPasados">
 
   <div class="filtros-pasados-titulo">
     🔎 Buscar registros que no tengan:
@@ -4311,6 +4346,17 @@ function configurarFiltrosExclusivosPasados(){
 document.addEventListener("DOMContentLoaded", function(){
   configurarFiltrosExclusivosPasados();
 });
+
+
+// Mostrar u ocultar los filtros de Regularizar registros.
+function toggleFiltrosPasados(){
+  const panel = document.getElementById('panelFiltrosPasados');
+  const boton = document.getElementById('btnToggleFiltrosPasados');
+  if(!panel || !boton) return;
+
+  const oculto = panel.classList.toggle('oculto');
+  boton.textContent = oculto ? '🔍 Mostrar filtros' : '🔽 Ocultar filtros';
+}
 
 function limpiarFiltrosPasados(){
   restaurarFormularioPasado();
@@ -9685,7 +9731,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V7.0 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 </body>
 </html>
 
