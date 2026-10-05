@@ -420,6 +420,58 @@ th{
     cursor:pointer;
 }
 
+/* =====================================================
+   MODAL DE COINCIDENCIA / DUPLICADO
+===================================================== */
+.duplicado-modal-content{
+    max-width:720px;
+    padding:0;
+    overflow:hidden;
+    border-radius:16px;
+    box-shadow:0 24px 70px rgba(15,23,42,.28);
+}
+.duplicado-modal-top{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:20px 24px;
+    background:linear-gradient(135deg,#fff7ed,#fff);
+    border-bottom:1px solid #fed7aa;
+}
+.duplicado-icon{
+    width:44px; height:44px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:#ffedd5; color:#c2410c; font-size:23px; flex:none;
+}
+.duplicado-titulo{margin:0;font-size:20px;color:#172033;}
+.duplicado-subtitulo{margin:4px 0 0;color:#64748b;font-size:13px;}
+.duplicado-body{padding:20px 24px;max-height:62vh;overflow-y:auto;}
+.duplicado-aviso{
+    margin-bottom:16px;padding:12px 14px;border-radius:10px;
+    background:#f8fafc;border:1px solid #e2e8f0;color:#475569;
+    line-height:1.5;font-size:14px;
+}
+.duplicado-registro{
+    border:1px solid #dbe3ee;border-radius:12px;padding:14px 16px;
+    margin-bottom:12px;background:#fff;
+}
+.duplicado-registro-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+.duplicado-registro-num{font-weight:700;color:#1e3a8a;}
+.duplicado-badge{font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;background:#fee2e2;color:#b91c1c;}
+.duplicado-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px;font-size:13px;}
+.duplicado-item{color:#475569;}
+.duplicado-item strong{color:#172033;}
+.duplicado-motivo{margin-top:10px;padding-top:9px;border-top:1px solid #eef2f7;color:#64748b;font-size:12px;}
+.duplicado-footer{
+    display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;
+    border-top:1px solid #e5e7eb;background:#f8fafc;
+}
+.duplicado-btn{border:0;border-radius:9px;padding:10px 20px;font-weight:700;cursor:pointer;font-size:14px;}
+.duplicado-btn-cancelar{background:#e2e8f0;color:#334155;}
+.duplicado-btn-continuar{background:#2563eb;color:#fff;box-shadow:0 2px 5px rgba(37,99,235,.25);}
+.duplicado-btn-continuar:hover{background:#1d4ed8;}
+@media(max-width:620px){.duplicado-grid{grid-template-columns:1fr}.duplicado-modal-top,.duplicado-body,.duplicado-footer{padding-left:16px;padding-right:16px}}
+
 .btn-editar{
     min-width:42px;
     padding:8px 10px;
@@ -4003,6 +4055,27 @@ function analizarDuplicados(registrosExistentes, datos){
   return coincidencias;
 }
 
+let resolverDuplicadoModal = null;
+
+function abrirModalDuplicado(){
+  const modal = document.getElementById("modalDuplicadoOT");
+  if(!modal) return Promise.resolve(true);
+  modal.classList.add("active");
+  document.body.style.overflow = "hidden";
+  return new Promise(function(resolve){ resolverDuplicadoModal = resolve; });
+}
+
+function resolverModalDuplicado(valor){
+  const modal = document.getElementById("modalDuplicadoOT");
+  if(modal) modal.classList.remove("active");
+  document.body.style.overflow = "";
+  if(resolverDuplicadoModal){
+    const fn = resolverDuplicadoModal;
+    resolverDuplicadoModal = null;
+    fn(!!valor);
+  }
+}
+
 async function verificarDuplicadosAntesDeRegistrar(datos){
 
   try{
@@ -4017,37 +4090,42 @@ async function verificarDuplicadosAntesDeRegistrar(datos){
       return true;
     }
 
-    let mensaje = "";
-
     const hayExacta = coincidencias.some(function(x){ return x.exacta; });
+    const titulo = hayExacta ? "Se encontró una coincidencia" : "Posible coincidencia de OT";
+    const descripcion = "Se encontraron registros con una OT igual o posiblemente relacionada. La placa puede repetirse porque un vehículo puede ingresar varias veces al taller. Revise cuál corresponde antes de continuar.";
 
-    if(hayExacta){
-      mensaje += "⚠️ SE ENCONTRÓ UNA COINCIDENCIA\n\n";
-    }else{
-      mensaje += "⚠️ POSIBLE COINCIDENCIA DE OT\n\n";
-    }
+    const body = document.getElementById("duplicadoModalBody");
+    if(!body) return true;
 
-    mensaje += "Se encontraron registros con una OT igual o posiblemente relacionada. La placa puede repetirse porque un vehículo puede ingresar varias veces. Revise cuál corresponde antes de continuar:\n\n";
+    let html = '<div class="duplicado-aviso">' + descripcion + '</div>';
 
     coincidencias.slice(0,5).forEach(function(x, indice){
-      const r = x.registro;
-      mensaje +=
-        "REGISTRO " + (indice + 1) + "\n" +
-        "• OT: " + (r.ot || "—") + "\n" +
-        "• Placa: " + (r.placa || "—") + "\n" +
-        "• VIN: " + (r.vin || "—") + "\n" +
-        "• Estado: " + (r.estado || "—") + "\n" +
-        "• Fecha y hora de lavado: " + (formatearFechaHoraRegularizacion(r.hora_inicio_lavado) || "—") + "\n" +
-        "• Motivo: " + (x.motivos.join(", ") || "coincidencia") + "\n\n";
+      const r = x.registro || {};
+      const badge = x.exacta ? "OT exacta" : "OT posiblemente relacionada";
+      html +=
+        '<div class="duplicado-registro">' +
+          '<div class="duplicado-registro-head">' +
+            '<span class="duplicado-registro-num">Registro ' + (indice + 1) + '</span>' +
+            '<span class="duplicado-badge">' + badge + '</span>' +
+          '</div>' +
+          '<div class="duplicado-grid">' +
+            '<div class="duplicado-item"><strong>OT:</strong> ' + (r.ot || '—') + '</div>' +
+            '<div class="duplicado-item"><strong>Placa:</strong> ' + (r.placa || '—') + '</div>' +
+            '<div class="duplicado-item"><strong>VIN:</strong> ' + (r.vin || '—') + '</div>' +
+            '<div class="duplicado-item"><strong>Estado:</strong> ' + (r.estado || '—') + '</div>' +
+            '<div class="duplicado-item"><strong>Fecha:</strong> ' + (formatearFechaHoraRegularizacion(r.hora_inicio_lavado) || '—') + '</div>' +
+          '</div>' +
+          '<div class="duplicado-motivo">Motivo: ' + (x.motivos.join(', ') || 'coincidencia') + '</div>' +
+        '</div>';
     });
 
     if(coincidencias.length > 5){
-      mensaje += "Y " + (coincidencias.length - 5) + " registro(s) adicional(es).\n\n";
+      html += '<div class="duplicado-aviso">Y ' + (coincidencias.length - 5) + ' registro(s) adicional(es).</div>';
     }
 
-    mensaje += "¿Desea continuar con la actualización de todas formas?";
-
-    return window.confirm(mensaje);
+    body.innerHTML = html;
+    document.getElementById("duplicadoModalTitulo").textContent = titulo;
+    return await abrirModalDuplicado();
 
   }catch(error){
 
@@ -9732,6 +9810,27 @@ programarCierreAutomatico1930();
 
 
 <div class="version-app">V5.5 Dashboard</div>
+
+<!-- =====================================================
+     MODAL DE COINCIDENCIA / DUPLICADO
+===================================================== -->
+<div id="modalDuplicadoOT" class="modal">
+  <div class="modal-content duplicado-modal-content">
+    <div class="duplicado-modal-top">
+      <div class="duplicado-icon">⚠️</div>
+      <div>
+        <h2 id="duplicadoModalTitulo" class="duplicado-titulo">Se encontró una coincidencia</h2>
+        <p class="duplicado-subtitulo">Revise el registro antes de continuar</p>
+      </div>
+    </div>
+    <div id="duplicadoModalBody" class="duplicado-body"></div>
+    <div class="duplicado-footer">
+      <button type="button" class="duplicado-btn duplicado-btn-cancelar" onclick="resolverModalDuplicado(false)">Cancelar</button>
+      <button type="button" class="duplicado-btn duplicado-btn-continuar" onclick="resolverModalDuplicado(true)">Continuar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
 
