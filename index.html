@@ -9400,12 +9400,17 @@ function estadoDashboardVehiculo(r){
 }
 
 function filtrarFacturasFacturacionMensualDashboard(desde,hasta){
+  // La facturación mensual se determina por el MES AL QUE PERTENECE la factura,
+  // no por la fecha de emisión. Esto permite, por ejemplo, que una factura
+  // emitida en octubre pero correspondiente a septiembre se contabilice en septiembre.
+  const desdeMes=String(desde||"").slice(0,7);
+  const hastaMes=String(hasta||"").slice(0,7);
   return (facturasDashboard||[]).filter(function(f){
-    const periodo=String(f.periodo_facturacion||f.fecha_emision||"").slice(0,10);
+    const periodo=String(f.periodo_facturacion||f.fecha_emision||"").slice(0,7);
     const estadoFactura=String(f.estado_factura||"Vigente").trim().toLowerCase();
     const estadoPago=String(f.estado_pago||"").trim().toLowerCase();
     const anulada = estadoFactura === "anulada" || estadoPago === "anulada";
-    return !anulada && (!desde || periodo>=desde) && (!hasta || periodo<=hasta);
+    return !anulada && (!desdeMes || periodo>=desdeMes) && (!hastaMes || periodo<=hastaMes);
   });
 }
 
@@ -9589,12 +9594,14 @@ function renderGraficasDashboard(lista){
 
   const desde=document.getElementById("dashboardDesde")?.value||"";
   const hasta=document.getElementById("dashboardHasta")?.value||"";
-  // La facturación mensual es global respecto a marca, servicio y tipo,
-  // pero sí respeta el rango de fechas seleccionado en el Dashboard.
-  const tiposSeleccionadosDashboard=obtenerSeleccionDashboard('tipo');
+  // La facturación mensual es global respecto a marca, servicio y tipo.
+  // El rango Desde/Hasta se interpreta por MES DE FACTURACIÓN, es decir,
+  // por periodo_facturacion y no por fecha_emision.
   const facturas=filtrarFacturasFacturacionMensualDashboard(desde,hasta);
   const porMesFacturacion={};
   facturas.forEach(function(f){
+    // Prioridad: periodo_facturacion. Solo se usa fecha_emision como respaldo
+    // para registros antiguos que todavía no tengan periodo asignado.
     const clave=String(f.periodo_facturacion||f.fecha_emision||"").slice(0,7);
     if(!clave) return;
     if(!porMesFacturacion[clave]) porMesFacturacion[clave]=0;
@@ -9917,7 +9924,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V7.0 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
