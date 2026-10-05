@@ -16,7 +16,7 @@
 *{
     box-sizing:border-box;
 }
- 
+
 body{
     zoom:0.74;
     margin:0;
@@ -9563,6 +9563,7 @@ function nombreMesDashboard(clave){
 
 function renderGraficasDashboard(lista){
   let nuevos=0, servicios=0, otros=0;
+  const tiposSeleccionadosDashboard=obtenerSeleccionDashboard('tipo');
   const porMes={};
   lista.forEach(function(r){
     const tipo=normalizarTipoDashboard(r.tipo);
@@ -9643,8 +9644,8 @@ function renderGraficasDashboard(lista){
   </div>
   <div class="dashboard-grafica-panel" style="margin-top:20px">
     <h3>💵 Facturación total por mes</h3>
-    <div class="dashboard-grafica-subtitulo">Total facturado por fecha de emisión (WankaMotors + Multimarkas, sin anuladas).</div>
-    ${clavesFact.length ? `<div class="dashboard-monto-mes" style="display:flex;flex-direction:row;align-items:flex-end;justify-content:center;gap:18px;min-height:250px;padding:12px 10px 4px;overflow-x:auto">${barrasFact}</div>` : '<div class="dashboard-vacio">No hay facturas emitidas en el periodo seleccionado.</div>'}
+    <div class="dashboard-grafica-subtitulo">Total facturado por mes de pertenencia de la factura (WankaMotors + Multimarkas, sin anuladas).</div>
+    ${clavesFact.length ? `<div class="dashboard-monto-mes" style="display:flex;flex-direction:row;align-items:flex-end;justify-content:center;gap:18px;min-height:250px;padding:12px 10px 4px;overflow-x:auto">${barrasFact}</div>` : '<div class="dashboard-vacio">No hay facturas correspondientes al periodo seleccionado.</div>'}
   </div>`;
 }
 function renderDashboard(lista){
@@ -9924,7 +9925,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V9.0 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
