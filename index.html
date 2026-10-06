@@ -2051,7 +2051,7 @@ onclick="limpiarFormulario()">
 </div>
 <div class="table-container"><table><thead><tr>
 <th><input type="checkbox" class="facturacion-check" id="facturacionTodos" onchange="seleccionarTodosFacturacion(this)" title="Seleccionar los registros de esta página"></th>
-<th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>IGV</th><th>Total</th><th>Estado</th><th>Factura asociada</th><th>Fecha facturación</th>
+<th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>IGV</th><th>Total</th><th>Estado</th><th>Factura asociada</th><th>Periodo de facturación</th>
 </tr></thead><tbody id="tablaFacturacion"><tr><td colspan="15" class="empty">Cargando facturación...</td></tr></tbody></table></div>
 <div id="paginacionFacturacion" class="paginacion-modulo"></div>
 
@@ -6886,13 +6886,41 @@ async function cargarRegistrosFacturacion(){
 
 function fechaCortaFacturacion(valor){
   if(!valor) return "";
-  const d=new Date(valor);
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-PE",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const texto=String(valor).trim();
+  // Los campos DATE de Supabase llegan como YYYY-MM-DD.
+  // No usar new Date() para estos valores porque el navegador puede
+  // interpretarlos como UTC y mostrarlos un día antes en Perú.
+  const m=texto.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  if(m) return m[3]+"/"+m[2]+"/"+m[1];
+  const d=new Date(texto);
+  if(isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-PE",{timeZone:"America/Lima",day:"2-digit",month:"2-digit",year:"numeric"});
+}
+
+function periodoCortoFacturacion(valor){
+  if(!valor) return "";
+  const texto=String(valor).trim();
+  // periodo_facturacion es un dato independiente de fecha_facturacion.
+  // Supabase normalmente lo entrega como YYYY-MM-DD (por ejemplo 2026-09-01).
+  const m=texto.match(/^(\d{4})-(\d{2})(?:-\d{2})?(?:$|T)/);
+  if(m) return m[2]+"/"+m[1];
+  const m2=texto.match(/^(\d{2})[\/-](\d{4})$/);
+  if(m2) return m2[1]+"/"+m2[2];
+  return texto;
+}
+
+function obtenerPeriodoFacturacionPorVehiculo(vehiculoId){
+  const factura=obtenerFacturaDashboardPorVehiculo(vehiculoId);
+  return factura ? factura.periodo_facturacion : "";
 }
 function valorFechaFacturacion(valor){
   if(!valor) return "";
-  const d=new Date(valor);
-  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0,10);
+  const texto=String(valor).trim();
+  const m=texto.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(m) return m[1];
+  const d=new Date(texto);
+  if(isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Lima",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
 }
 function obtenerFechaServicioFacturacion(r){return r.hora_inicio_lavado || r.created_at || "";}
 
@@ -7463,7 +7491,7 @@ function renderFacturacion(){
       <td>S/ ${x.sinIgv.toFixed(2)}</td><td>S/ ${x.igv.toFixed(2)}</td><td><strong>S/ ${x.total.toFixed(2)}</strong></td>
       <td><span class="facturacion-estado ${facturado?"facturado":"pendiente"}">${facturado?"Facturado":"Pendiente"}</span></td>
       <td>${facturado && obtenerFacturaDashboardPorVehiculo(r.id) ? `<span class="factura-asociada-badge" title="Factura asociada">🧾 ${esc(obtenerFacturaDashboardPorVehiculo(r.id).numero_factura||"")}</span>` : "—"}</td>
-      <td>${esc(fechaCortaFacturacion(r.fecha_facturacion)||"—")}</td>
+      <td>${esc(periodoCortoFacturacion(obtenerPeriodoFacturacionPorVehiculo(r.id))||"—")}</td>
     </tr>`;
   });
   if(!lista.length) tbody.innerHTML='<tr><td colspan="15" class="empty">No hay servicios para los filtros seleccionados.</td></tr>';
@@ -9152,7 +9180,7 @@ function exportarFacturacionExcel(){
   if(typeof XLSX==="undefined"){mostrarAlerta("No se pudo cargar el módulo de Excel.","error");return;}
   const datos=lista.map(function(r){
     const x=calcularImportesFacturacion(r.precio_sin_igv);
-    return {"Fecha":fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)),"OT":r.ot||"","Placa":r.placa||"","VIN":r.vin||"","Marca":r.marca||"","Modelo":r.modelo||"","Taller":r.servicio||"","Precio sin IGV":Number(x.sinIgv.toFixed(2)),"IGV":Number(x.igv.toFixed(2)),"Total con IGV":Number(x.total.toFixed(2)),"Estado":r.facturado?"Facturado":"Pendiente","Factura asociada":(obtenerFacturaDashboardPorVehiculo(r.id)||{}).numero_factura||"","Fecha facturación":fechaCortaFacturacion(r.fecha_facturacion)||""};
+    return {"Fecha":fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)),"OT":r.ot||"","Placa":r.placa||"","VIN":r.vin||"","Marca":r.marca||"","Modelo":r.modelo||"","Taller":r.servicio||"","Precio sin IGV":Number(x.sinIgv.toFixed(2)),"IGV":Number(x.igv.toFixed(2)),"Total con IGV":Number(x.total.toFixed(2)),"Estado":r.facturado?"Facturado":"Pendiente","Factura asociada":(obtenerFacturaDashboardPorVehiculo(r.id)||{}).numero_factura||"","Periodo de facturación":periodoCortoFacturacion(obtenerPeriodoFacturacionPorVehiculo(r.id))||""};
   });
   const hoja=XLSX.utils.json_to_sheet(datos);const libro=XLSX.utils.book_new();XLSX.utils.book_append_sheet(libro,hoja,"Facturación");XLSX.writeFile(libro,"Facturacion_Wankamotors.xlsx");
 }
@@ -9931,7 +9959,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V3.0 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
