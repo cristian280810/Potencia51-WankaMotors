@@ -3395,7 +3395,7 @@ async function cargarServiciosWankamotors(){
 
     // Selección automática según el tipo y la marca.
     // Taller: Lavado básico + Encerado.
-    // Nuevo: Lavado básico, excepto MG: Lavado básico + Encerado.
+    // Nuevo: Lavado básico, excepto Chery: Lavado básico + Encerado.
     actualizarServicioAutomaticoPorTipoYMarca();
     seleccionarServicioPorNombre("pasadoServicio", "Lavado básico");
 
@@ -3786,8 +3786,8 @@ function actualizarServicioAutomaticoPorTipoYMarca(){
   const marca = marcaElemento ? String(marcaElemento.value || "").trim().toUpperCase() : "";
 
   // Taller siempre usa Lavado básico + Encerado.
-  // Nuevo usa Lavado básico, salvo MG que usa Lavado básico + Encerado.
-  const servicioPredeterminado = (tipo === "Taller" || (tipo === "Nuevo" && marca === "MG"))
+  // Nuevo usa Lavado básico, salvo Chery que usa Lavado básico + Encerado.
+  const servicioPredeterminado = (tipo === "Taller" || (tipo === "Nuevo" && marca === "CHERY"))
     ? "Lavado básico + Encerado"
     : "Lavado básico";
 
@@ -10297,7 +10297,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.8 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
