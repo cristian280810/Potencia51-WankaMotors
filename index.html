@@ -9447,6 +9447,70 @@ function exportarFacturacionExcel(){
 ===================================================== */
 let registrosDashboard = [];
 
+/*
+  Devuelve los servicios individuales guardados en el campo "servicio".
+  Como algunos servicios tienen el signo "+" en su propio nombre, la
+  separación se hace comparando contra el catálogo activo, priorizando
+  los nombres más largos. Así "Lavado básico + Encerado" sigue siendo
+  un solo servicio cuando ese es el nombre exacto del catálogo.
+*/
+function obtenerServiciosIndividualesDashboard(valor){
+  const texto = String(valor || "").trim();
+  if(!texto) return [];
+
+  const catalogo = (serviciosWankamotors || [])
+    .map(function(servicio){ return String(servicio.nombre_servicio || "").trim(); })
+    .filter(Boolean)
+    .sort(function(a,b){ return b.length - a.length; });
+
+  const textoLower = texto.toLowerCase();
+
+  // Si todo el texto ya es un servicio del catálogo, no lo dividimos.
+  const coincidenciaExacta = catalogo.find(function(nombre){
+    return nombre.toLowerCase() === textoLower;
+  });
+  if(coincidenciaExacta) return [coincidenciaExacta];
+
+  if(!catalogo.length) return [texto];
+
+  const catalogoLower = catalogo.map(function(nombre){
+    return {nombre:nombre, lower:nombre.toLowerCase()};
+  });
+  const memoria = new Map();
+
+  function resolver(posicion){
+    if(posicion === texto.length) return [];
+    if(memoria.has(posicion)) return memoria.get(posicion);
+
+    for(const item of catalogoLower){
+      if(textoLower.slice(posicion, posicion + item.lower.length) !== item.lower) continue;
+
+      const fin = posicion + item.lower.length;
+      if(fin === texto.length){
+        const resultadoFinal = [item.nombre];
+        memoria.set(posicion, resultadoFinal);
+        return resultadoFinal;
+      }
+
+      if(texto.slice(fin, fin + 3) === " + "){
+        const resto = resolver(fin + 3);
+        if(resto){
+          const resultado = [item.nombre].concat(resto);
+          memoria.set(posicion, resultado);
+          return resultado;
+        }
+      }
+    }
+
+    memoria.set(posicion, null);
+    return null;
+  }
+
+  const resultado = resolver(0);
+  // Si no se puede interpretar por completo, conservamos el texto original.
+  return resultado && resultado.length ? resultado : [texto];
+}
+
 function obtenerSeleccionDashboard(nombre){
   return Array.from(document.querySelectorAll('#dashboard'+nombre.charAt(0).toUpperCase()+nombre.slice(1)+'Menu input[data-dashboard-filter="'+nombre+'"]:checked')).map(function(el){
     return String(el.value || '').trim();
@@ -9532,10 +9596,10 @@ function obtenerRegistrosBaseFiltrosDashboard(registros, excluir, opcionesOverri
     if(desde && fecha<desde) return false;
     if(hasta && fecha>hasta) return false;
     const m=String(r.marca||'').trim();
-    const sv=String(r.servicio||'').trim();
+    const serviciosRegistro=obtenerServiciosIndividualesDashboard(r.servicio);
     const t=String(r.tipo||'').trim();
     if(excluir!=='marca' && seleccion.marca.length && !seleccion.marca.includes(m)) return false;
-    if(excluir!=='servicio' && seleccion.servicio.length && !seleccion.servicio.includes(sv)) return false;
+    if(excluir!=='servicio' && seleccion.servicio.length && !serviciosRegistro.some(function(nombre){return seleccion.servicio.includes(nombre);})) return false;
     if(excluir!=='tipo' && seleccion.tipo.length && !seleccion.tipo.includes(t)) return false;
     return true;
   });
@@ -9550,7 +9614,7 @@ function cargarOpcionesFiltrosDashboard(registros){
 
   const configuraciones=[
     {nombre:'marca',menuId:'dashboardMarcaMenu',todosLabel:'Todas las marcas',obtener:function(r){return String(r.marca||'').trim();}},
-    {nombre:'servicio',menuId:'dashboardServicioMenu',todosLabel:'Todos los servicios',obtener:function(r){return String(r.servicio||'').trim();}},
+    {nombre:'servicio',menuId:'dashboardServicioMenu',todosLabel:'Todos los servicios',obtener:function(r){return obtenerServiciosIndividualesDashboard(r.servicio);}},
     {nombre:'tipo',menuId:'dashboardTipoMenu',todosLabel:'Todos',obtener:function(r){return String(r.tipo||'').trim();}}
   ];
 
@@ -9561,7 +9625,10 @@ function cargarOpcionesFiltrosDashboard(registros){
     // Las opciones de cada filtro se calculan usando TODOS los demás filtros activos.
     // Esto convierte el Dashboard en un sistema de filtros cruzados/facetas.
     const base=obtenerRegistrosBaseFiltrosDashboard(registros,cfg.nombre);
-    const valores=[...new Set(base.map(cfg.obtener).filter(Boolean))].sort(function(a,b){return a.localeCompare(b,'es');});
+    const valores=[...new Set(base.flatMap(function(r){
+      const valor=cfg.obtener(r);
+      return Array.isArray(valor) ? valor : [valor];
+    }).filter(Boolean))].sort(function(a,b){return a.localeCompare(b,'es');});
     const seleccionActual=seleccionesPrevias[cfg.nombre] || [];
 
     menu.innerHTML='';
@@ -9819,9 +9886,9 @@ async function cargarDashboard(){
     const filtrados = registrosDashboard.filter(r=>{
       const fecha = fechaLocalDashboard(r.hora_inicio_lavado || r.created_at);
       const marcaRegistro=String(r.marca||'').trim();
-      const servicioRegistro=String(r.servicio||'').trim();
+      const serviciosRegistro=obtenerServiciosIndividualesDashboard(r.servicio);
       const tipoRegistro=String(r.tipo||'').trim();
-      return (!desde || fecha >= desde) && (!hasta || fecha <= hasta) && (!marcas.length || marcas.includes(marcaRegistro)) && (!servicios.length || servicios.includes(servicioRegistro)) && (!tipos.length || tipos.includes(tipoRegistro));
+      return (!desde || fecha >= desde) && (!hasta || fecha <= hasta) && (!marcas.length || marcas.includes(marcaRegistro)) && (!servicios.length || serviciosRegistro.some(function(nombre){return servicios.includes(nombre);})) && (!tipos.length || tipos.includes(tipoRegistro));
     });
     const orden=document.getElementById("dashboardOrdenFecha")?.value || "desc";
     dashboardPaginaActual=1;
@@ -10012,9 +10079,16 @@ function renderDashboard(lista){
   const porServicio = {};
   lista.forEach(r=>{
     const m=String(r.marca||"Sin marca").trim()||"Sin marca";
-    const sv=String(r.servicio||"Sin servicio").trim()||"Sin servicio";
+    const serviciosIndividuales=obtenerServiciosIndividualesDashboard(r.servicio);
     porMarca[m]=(porMarca[m]||0)+1;
-    porServicio[sv]=(porServicio[sv]||0)+1;
+
+    if(!serviciosIndividuales.length){
+      porServicio["Sin servicio"]=(porServicio["Sin servicio"]||0)+1;
+    }else{
+      serviciosIndividuales.forEach(function(sv){
+        porServicio[sv]=(porServicio[sv]||0)+1;
+      });
+    }
   });
   const marcasSeleccionadasDashboard=obtenerSeleccionDashboard('marca');
   const serviciosSeleccionadosDashboard=obtenerSeleccionDashboard('servicio');
@@ -10046,7 +10120,7 @@ function renderDashboard(lista){
 
   ${renderGraficasDashboard(lista)}
 
-  <div class="card"><h3>📋 Detalle</h3><div class="table-container"><table class="dashboard-table"><thead><tr><th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>Total</th><th>Estado</th></tr></thead><tbody>${lista.slice((dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA,dashboardPaginaActual*DASHBOARD_POR_PAGINA).map((r,i)=>{const p=Number(r.precio_sin_igv||0);const est=estadoDashboardVehiculo(r);return `<tr><td class="numero-registro">${(dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA+i+1}</td><td>${esc(formatearFechaDashboard(r.hora_inicio_lavado||r.created_at))}</td><td>${esc(etiquetaTipoRegistro(r.tipo))}</td><td>${esc(r.ot||"")}</td><td>${esc(r.placa||"")}</td><td>${esc(r.vin||"")}</td><td>${esc(r.marca||"")}</td><td>${esc(r.servicio||"")}</td><td>S/ ${p.toFixed(2)}</td><td>S/ ${(p*1.18).toFixed(2)}</td><td><span class="facturacion-estado ${est.clase}" title="${est.factura ? "Factura: "+esc(est.factura) : (est.texto==="No facturado" ? "Aún no tiene factura" : "No se encontró el número de factura")}">${esc(est.texto)}</span></td></tr>`}).join("") || '<tr><td colspan="11" class="dashboard-vacio">Sin registros</td></tr>'}</tbody></table></div>${renderPaginacionDashboardHtml(lista.length)}</div>`;
+  <div class="card"><h3>📋 Detalle</h3><div class="table-container"><table class="dashboard-table"><thead><tr><th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>Total</th><th>Estado</th></tr></thead><tbody>${lista.slice((dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA,dashboardPaginaActual*DASHBOARD_POR_PAGINA).map((r,i)=>{const p=Number(r.precio_sin_igv||0);const est=estadoDashboardVehiculo(r);return `<tr><td class="numero-registro">${(dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA+i+1}</td><td>${esc(formatearFechaDashboard(r.hora_inicio_lavado||r.created_at))}</td><td>${esc(etiquetaTipoRegistro(r.tipo))}</td><td>${esc(r.ot||"")}</td><td>${esc(r.placa||"")}</td><td>${esc(r.vin||"")}</td><td>${esc(r.marca||"")}</td><td>${obtenerServiciosIndividualesDashboard(r.servicio).map(function(nombreServicio){return '<div style="margin:2px 0;">'+esc(nombreServicio)+'</div>';}).join("")}</td><td>S/ ${p.toFixed(2)}</td><td>S/ ${(p*1.18).toFixed(2)}</td><td><span class="facturacion-estado ${est.clase}" title="${est.factura ? "Factura: "+esc(est.factura) : (est.texto==="No facturado" ? "Aún no tiene factura" : "No se encontró el número de factura")}">${esc(est.texto)}</span></td></tr>`}).join("") || '<tr><td colspan="11" class="dashboard-vacio">Sin registros</td></tr>'}</tbody></table></div>${renderPaginacionDashboardHtml(lista.length)}</div>`;
   actualizarResumenFiltrosDashboard();
 }
 function renderPaginacionDashboardHtml(totalRegistros){
@@ -10061,7 +10135,7 @@ function renderPaginacionDashboardHtml(totalRegistros){
   h+=`<button type="button" onclick="irPaginaDashboard(${dashboardPaginaActual+1})" ${dashboardPaginaActual===totalPaginas?"disabled":""}>›</button>`;
   h+=`<span class="info">Página ${dashboardPaginaActual} de ${totalPaginas}</span></div>`; return h;
 }
-function irPaginaDashboard(p){dashboardPaginaActual=Math.max(1,p); const desde=document.getElementById("dashboardDesde")?.value||"", hasta=document.getElementById("dashboardHasta")?.value||"", marcas=obtenerSeleccionDashboard('marca'), servicios=obtenerSeleccionDashboard('servicio'), tipos=obtenerSeleccionDashboard('tipo'); const filtrados=registrosDashboard.filter(r=>{const f=fechaLocalDashboard(r.hora_inicio_lavado||r.created_at);const m=String(r.marca||'').trim(),s=String(r.servicio||'').trim(),t=String(r.tipo||'').trim();return (!desde||f>=desde)&&(!hasta||f<=hasta)&&(!marcas.length||marcas.includes(m))&&(!servicios.length||servicios.includes(s))&&(!tipos.length||tipos.includes(t));}); const orden=document.getElementById("dashboardOrdenFecha")?.value||"desc"; renderDashboard(ordenarPorFechaModulo(filtrados,orden,r=>r.hora_inicio_lavado||r.created_at));}
+function irPaginaDashboard(p){dashboardPaginaActual=Math.max(1,p); const desde=document.getElementById("dashboardDesde")?.value||"", hasta=document.getElementById("dashboardHasta")?.value||"", marcas=obtenerSeleccionDashboard('marca'), servicios=obtenerSeleccionDashboard('servicio'), tipos=obtenerSeleccionDashboard('tipo'); const filtrados=registrosDashboard.filter(r=>{const f=fechaLocalDashboard(r.hora_inicio_lavado||r.created_at);const m=String(r.marca||'').trim(),serviciosRegistro=obtenerServiciosIndividualesDashboard(r.servicio),t=String(r.tipo||'').trim();return (!desde||f>=desde)&&(!hasta||f<=hasta)&&(!marcas.length||marcas.includes(m))&&(!servicios.length||serviciosRegistro.some(function(nombre){return servicios.includes(nombre);}))&&(!tipos.length||tipos.includes(t));}); const orden=document.getElementById("dashboardOrdenFecha")?.value||"desc"; renderDashboard(ordenarPorFechaModulo(filtrados,orden,r=>r.hora_inicio_lavado||r.created_at));}
 
 function limpiarDashboard(){
   dashboardPaginaActual=1;
