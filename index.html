@@ -11,6 +11,7 @@
 
 <style>
 .numero-seguimiento { text-align:center; font-weight:700; }
+.servicio-seguimiento { min-width:170px; line-height:1.35; }
 
 
 *{
@@ -1901,7 +1902,7 @@ id="grupoFotoIngresoRegistro"
 class="form-group">
 
 <label>
-Foto de ingreso *
+Foto de ingreso (opcional)
 </label>
 
 <input
@@ -2801,6 +2802,10 @@ VIN
 
 <th>
 Marca
+</th>
+
+<th>
+Servicio
 </th>
 
 <th class="col-modelo">
@@ -4092,11 +4097,6 @@ if(!marca || !serviciosSeleccionados.length || serviciosSeleccionados.length !==
   return;
 }
 
-if(!archivoIngreso){
-  mostrarAlerta("Debe adjuntar la foto de ingreso.","error");
-  return;
-}
-
 /* Para vehículos NUEVOS, solo la fotografía del VIN es obligatoria. */
 if(tipo === "Nuevo" && !archivoVIN){
   mostrarAlerta("Debe adjuntar la foto del VIN para registrar un vehículo nuevo.","error");
@@ -4117,10 +4117,12 @@ if(!continuarDuplicado){
 boton.disabled = true;
 loading.style.display = "block";
 
-const fotoIngreso = await comprimirFoto(archivoIngreso);
+let fotoIngreso = "";
 let fotoOT = "";
 let fotoVIN = "";
 
+// La foto de ingreso es opcional; si se adjunta, se comprime y se guarda.
+if(archivoIngreso){ fotoIngreso = await comprimirFoto(archivoIngreso); }
 if(archivoOT){ fotoOT = await comprimirFoto(archivoOT); }
 if(archivoVIN){ fotoVIN = await comprimirFoto(archivoVIN); }
 
@@ -5496,7 +5498,7 @@ try{
 if(!registros.length){
   document.getElementById("tablaSeguimiento").innerHTML = `
     <tr>
-      <td colspan="8" class="empty">
+      <td colspan="12" class="empty">
         Cargando información...
       </td>
     </tr>
@@ -5526,7 +5528,7 @@ console.error("Error cargando datos:",error);
 
 document.getElementById("tablaSeguimiento").innerHTML = `
 <tr>
-<td colspan="8" class="empty">
+<td colspan="12" class="empty">
 No se pudo cargar la información.
 </td>
 </tr>
@@ -5702,6 +5704,10 @@ function renderSeguimiento(){
  
         <td> 
           ${esc(r.marca)} 
+        </td> 
+
+        <td class="servicio-seguimiento"> 
+          ${(typeof obtenerServiciosIndividualesDashboard === "function" ? obtenerServiciosIndividualesDashboard(r.servicio) : [r.servicio || ""]).map(function(nombreServicio){ return '<div style="margin:2px 0;">' + esc(nombreServicio) + '</div>'; }).join("") || "—"} 
         </td> 
  
         <td class="col-modelo"> 
@@ -10297,7 +10303,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.8 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
