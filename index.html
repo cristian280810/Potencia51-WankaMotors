@@ -3488,11 +3488,10 @@ function actualizarResumenServiciosRegistro(){
     return;
   }
 
-  const importes = calcularTotalesServiciosRegistro(servicios);
-  resumen.textContent = servicios.length + (servicios.length === 1 ? " servicio" : " servicios") +
-    " · Sin IGV: S/ " + importes.sinIgv.toFixed(2) +
-    " · IGV: S/ " + importes.igv.toFixed(2) +
-    " · Total: S/ " + importes.conIgv.toFixed(2);
+  // En el formulario de registro solo mostramos la cantidad de servicios.
+  // Los importes se siguen calculando y guardando internamente para la facturación.
+  resumen.textContent = servicios.length +
+    (servicios.length === 1 ? " servicio seleccionado" : " servicios seleccionados");
 }
 
 function actualizarOpcionesServiciosRegistro(){
