@@ -3398,10 +3398,9 @@ async function cargarServiciosWankamotors(){
       select.disabled = false;
     });
 
-    // Selección automática según el tipo y la marca.
-    // Taller: Lavado básico + Encerado.
-    // Nuevo: Lavado básico, excepto Chery: Lavado básico + Encerado.
-    actualizarServicioAutomaticoPorTipoYMarca();
+    // Todos los vehículos comienzan con Lavado básico.
+    // Los servicios adicionales se seleccionan manualmente.
+    seleccionarServicioPorNombre("servicio", "Lavado básico");
     seleccionarServicioPorNombre("pasadoServicio", "Lavado básico");
 
   }catch(error){
@@ -3784,24 +3783,11 @@ function mostrarModuloAdministracion(nombre){
 ===================================================== */
 
 function actualizarServicioAutomaticoPorTipoYMarca(){
-
-  const tipoElemento = document.querySelector('input[name="tipo"]:checked');
-  const tipo = tipoElemento ? tipoElemento.value : "Taller";
-  const marcaElemento = document.getElementById("marca");
-  const marca = marcaElemento ? String(marcaElemento.value || "").trim().toUpperCase() : "";
-
-  // Taller siempre usa Lavado básico + Encerado.
-  // Nuevo usa Lavado básico, salvo Chery que usa Lavado básico + Encerado.
-  const servicioPredeterminado = (tipo === "Taller" || (tipo === "Nuevo" && marca === "CHERY"))
-    ? "Lavado básico + Encerado"
-    : "Lavado básico";
-
-  seleccionarServicioPorNombre("servicio", servicioPredeterminado);
-  normalizarServiciosDuplicadosRegistro();
-  actualizarOpcionesServiciosRegistro();
-  actualizarResumenServiciosRegistro();
+  // Todos los vehículos comienzan con Lavado básico.
+  // Los servicios adicionales, como Lavado básico + Encerado,
+  // se eligen manualmente según corresponda a cada vehículo.
+  seleccionarServicioPorNombre("servicio", "Lavado básico");
 }
-
 function cambiarTipo(tipo){
 
 const formGridRegistrar = document.getElementById("formGridRegistrar");
@@ -10216,13 +10202,6 @@ async function(){
     await cargarServiciosWankamotors();
   }catch(error){
     console.warn("El catálogo de servicios no pudo cargarse al iniciar:", error);
-  }
-
-  const marcaRegistro = document.getElementById("marca");
-  if(marcaRegistro){
-    marcaRegistro.addEventListener("change", function(){
-      actualizarServicioAutomaticoPorTipoYMarca();
-    });
   }
 
   [
