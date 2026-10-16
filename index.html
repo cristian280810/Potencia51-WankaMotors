@@ -3784,16 +3784,9 @@ function mostrarModuloAdministracion(nombre){
 ===================================================== */
 
 function actualizarServicioAutomaticoPorTipoYMarca(){
-  const tipoElemento = document.querySelector('input[name="tipo"]:checked');
-  const tipo = tipoElemento ? tipoElemento.value : "Taller";
-
-  // Taller: Lavado básico + Encerado.
-  // Nuevo: Lavado básico.
-  if(tipo === "Taller"){
-    seleccionarServicioPorNombre("servicio", "Lavado básico + Encerado");
-  }else{
-    seleccionarServicioPorNombre("servicio", "Lavado básico");
-  }
+  // Valor inicial para cualquier vehículo: Lavado básico.
+  // Si corresponde encerado, el lavador lo cambia manualmente.
+  seleccionarServicioPorNombre("servicio", "Lavado básico");
 }
 function cambiarTipo(tipo){
 
@@ -3871,8 +3864,8 @@ opcionNuevo
 
 }
 
-// Al cambiar Taller/Nuevo, ajustar automáticamente el servicio.
-actualizarServicioAutomaticoPorTipoYMarca();
+// El cambio entre Taller/Nuevo no modifica el servicio seleccionado.
+// Así el lavador puede elegir manualmente si corresponde encerado.
 
 }
 
@@ -10289,7 +10282,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.8 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
