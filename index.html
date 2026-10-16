@@ -3398,9 +3398,10 @@ async function cargarServiciosWankamotors(){
       select.disabled = false;
     });
 
-    // Todos los vehículos comienzan con Lavado básico.
-    // Los servicios adicionales se seleccionan manualmente.
-    seleccionarServicioPorNombre("servicio", "Lavado básico");
+    // Seleccionar el servicio DESPUÉS de cargar el catálogo de Supabase.
+    // Taller: Lavado básico + Encerado.
+    // Nuevo: Lavado básico.
+    actualizarServicioAutomaticoPorTipoYMarca();
     seleccionarServicioPorNombre("pasadoServicio", "Lavado básico");
 
   }catch(error){
@@ -10288,7 +10289,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.8 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
