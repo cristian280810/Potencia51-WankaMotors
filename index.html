@@ -3783,10 +3783,16 @@ function mostrarModuloAdministracion(nombre){
 ===================================================== */
 
 function actualizarServicioAutomaticoPorTipoYMarca(){
-  // Todos los vehículos comienzan con Lavado básico.
-  // Los servicios adicionales, como Lavado básico + Encerado,
-  // se eligen manualmente según corresponda a cada vehículo.
-  seleccionarServicioPorNombre("servicio", "Lavado básico");
+  const tipoElemento = document.querySelector('input[name="tipo"]:checked');
+  const tipo = tipoElemento ? tipoElemento.value : "Taller";
+
+  // Taller: Lavado básico + Encerado.
+  // Nuevo: Lavado básico.
+  if(tipo === "Taller"){
+    seleccionarServicioPorNombre("servicio", "Lavado básico + Encerado");
+  }else{
+    seleccionarServicioPorNombre("servicio", "Lavado básico");
+  }
 }
 function cambiarTipo(tipo){
 
