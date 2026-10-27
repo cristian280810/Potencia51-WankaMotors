@@ -2448,15 +2448,21 @@ onclick="limpiarFormulario()">
               <th class="sunat-number">Cantidad</th>
               <th class="sunat-number">Precio unitario sin IGV</th>
               <th class="sunat-number">Importe sin IGV</th>
+              <th class="sunat-number">Importe total con IGV</th>
             </tr>
           </thead>
           <tbody id="nuevaFacturaResumenServiciosBody">
-            <tr><td colspan="4" class="factura-items-sunat-empty">Selecciona los servicios que deseas facturar.</td></tr>
+            <tr><td colspan="5" class="factura-items-sunat-empty">Selecciona los servicios que deseas facturar.</td></tr>
           </tbody>
           <tfoot>
             <tr>
               <th colspan="3">Total sin IGV</th>
               <th id="nuevaFacturaResumenServiciosTotal" class="sunat-number">S/ 0.00</th>
+              <th></th>
+            </tr>
+            <tr>
+              <th colspan="4">Total con IGV</th>
+              <th id="nuevaFacturaResumenServiciosTotalConIgv" class="sunat-number">S/ 0.00</th>
             </tr>
           </tfoot>
         </table>
@@ -8461,7 +8467,8 @@ function obtenerSeleccionadosFacturacion(){
 function renderizarResumenServiciosParaSunat(seleccionados){
   const cuerpo=document.getElementById("nuevaFacturaResumenServiciosBody");
   const totalElemento=document.getElementById("nuevaFacturaResumenServiciosTotal");
-  if(!cuerpo || !totalElemento) return;
+  const totalConIgvElemento=document.getElementById("nuevaFacturaResumenServiciosTotalConIgv");
+  if(!cuerpo || !totalElemento || !totalConIgvElemento) return;
 
   const grupos=new Map();
   (seleccionados || []).forEach(function(registro){
@@ -8481,24 +8488,31 @@ function renderizarResumenServiciosParaSunat(seleccionados){
   });
 
   if(!items.length){
-    cuerpo.innerHTML='<tr><td colspan="4" class="factura-items-sunat-empty">No hay servicios seleccionados.</td></tr>';
+    cuerpo.innerHTML='<tr><td colspan="5" class="factura-items-sunat-empty">No hay servicios seleccionados.</td></tr>';
     totalElemento.textContent="S/ 0.00";
+    totalConIgvElemento.textContent="S/ 0.00";
     return;
   }
 
-  let subtotal=0;
+  let subtotalSinIgv=0;
+  let subtotalConIgv=0;
   cuerpo.innerHTML=items.map(function(item){
-    const importe=Number((item.cantidad*item.precio).toFixed(2));
-    subtotal+=importe;
+    const importeSinIgv=Number((item.cantidad*item.precio).toFixed(2));
+    const importes=calcularImportesFacturacion(importeSinIgv);
+    const importeConIgv=Number(importes.total.toFixed(2));
+    subtotalSinIgv+=importeSinIgv;
+    subtotalConIgv+=importeConIgv;
     return '<tr>' +
       '<td>'+esc(item.nombre)+'</td>' +
       '<td class="sunat-number">'+item.cantidad+'</td>' +
       '<td class="sunat-number">S/ '+item.precio.toFixed(2)+'</td>' +
-      '<td class="sunat-number">S/ '+importe.toFixed(2)+'</td>' +
+      '<td class="sunat-number">S/ '+importeSinIgv.toFixed(2)+'</td>' +
+      '<td class="sunat-number">S/ '+importeConIgv.toFixed(2)+'</td>' +
       '</tr>';
   }).join("");
 
-  totalElemento.textContent="S/ "+subtotal.toFixed(2);
+  totalElemento.textContent="S/ "+subtotalSinIgv.toFixed(2);
+  totalConIgvElemento.textContent="S/ "+subtotalConIgv.toFixed(2);
 }
 
 function abrirModalNuevaFactura(){
