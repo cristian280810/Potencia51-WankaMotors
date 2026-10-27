@@ -1257,6 +1257,21 @@ th.col-vin {
   text-align:center;
 }
 
+
+/* Dashboard: detalle plegable y renderizado bajo demanda */
+.dashboard-detalle-panel{margin-top:18px;}
+.dashboard-detalle-encabezado{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.dashboard-detalle-encabezado h3{margin:0;}
+.dashboard-detalle-encabezado p{margin:5px 0 0;color:#64748b;font-size:13px;}
+.dashboard-detalle-toggle{white-space:nowrap;}
+.dashboard-detalle-placeholder{
+  border:1px dashed #cbd5e1;border-radius:10px;padding:18px;
+  color:#64748b;background:#f8fafc;font-size:13px;line-height:1.5;
+}
+
 </style>
 <style>
 .facturacion-estado.facturado-pagado{background:#dcfce7;color:#166534;}
@@ -9919,6 +9934,9 @@ function exportarFacturacionExcel(){
    DASHBOARD
 ===================================================== */
 let registrosDashboard = [];
+// La tabla de detalle se mantiene oculta y no se renderiza hasta que el usuario la solicite.
+let dashboardDetalleVisible = false;
+let listaDashboardDetalleActual = [];
 
 /*
   Devuelve los servicios individuales guardados en el campo "servicio".
@@ -10483,6 +10501,8 @@ function renderGraficasDashboard(lista){
 function renderDashboard(lista){
   const cont = document.getElementById("dashboardContenido");
   if(!cont) return;
+  listaDashboardDetalleActual = Array.isArray(lista) ? lista : [];
+  lista = listaDashboardDetalleActual;
   const total = lista.length;
   const facturados = lista.filter(r=>r.facturado===true).length;
   const pendientes = total - facturados;
@@ -10594,9 +10614,64 @@ function renderDashboard(lista){
 
   ${renderGraficasDashboard(lista)}
 
-  <div class="card"><h3>📋 Detalle</h3><div class="table-container"><table class="dashboard-table"><thead><tr><th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>Total</th><th>Estado</th></tr></thead><tbody>${lista.slice((dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA,dashboardPaginaActual*DASHBOARD_POR_PAGINA).map((r,i)=>{const p=Number(r.precio_sin_igv||0);const est=estadoDashboardVehiculo(r);return `<tr><td class="numero-registro">${(dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA+i+1}</td><td>${esc(formatearFechaDashboard(r.hora_inicio_lavado||r.created_at))}</td><td>${esc(etiquetaTipoRegistro(r.tipo))}</td><td>${esc(r.ot||"")}</td><td>${esc(r.placa||"")}</td><td>${esc(r.vin||"")}</td><td>${esc(r.marca||"")}</td><td>${obtenerServiciosIndividualesDashboard(r.servicio).map(function(nombreServicio){return '<div style="margin:2px 0;">'+esc(nombreServicio)+'</div>';}).join("")}</td><td>S/ ${p.toFixed(2)}</td><td>S/ ${(p*1.18).toFixed(2)}</td><td><span class="facturacion-estado ${est.clase}" title="${est.factura ? "Factura: "+esc(est.factura) : (est.texto==="No facturado" ? "Aún no tiene factura" : "No se encontró el número de factura")}">${esc(est.texto)}</span></td></tr>`}).join("") || '<tr><td colspan="11" class="dashboard-vacio">Sin registros</td></tr>'}</tbody></table></div>${renderPaginacionDashboardHtml(lista.length)}</div>`;
+  <div class="card dashboard-detalle-panel">
+    <div class="dashboard-detalle-encabezado">
+      <div>
+        <h3>📋 Detalle</h3>
+        <p>La tabla permanece oculta hasta que necesites revisar los registros.</p>
+      </div>
+      <button type="button" class="btn btn-primary dashboard-detalle-toggle" onclick="alternarDetalleDashboard()">${dashboardDetalleVisible ? "Ocultar detalle" : "Ver detalle"} (${total})</button>
+    </div>
+    ${dashboardDetalleVisible
+      ? renderDetalleDashboardHtml(lista)
+      : '<div class="dashboard-detalle-placeholder">El detalle está oculto para mantener el Dashboard más ligero. Pulsa <strong>Ver detalle</strong> para mostrar la tabla y navegar por sus páginas.</div>'}
+  </div>`;
   actualizarResumenFiltrosDashboard();
 }
+function renderDetalleDashboardHtml(lista){
+  const inicio=(dashboardPaginaActual-1)*DASHBOARD_POR_PAGINA;
+  const filas=(lista || []).slice(inicio, inicio+DASHBOARD_POR_PAGINA).map(function(r,i){
+    const p=Number(r.precio_sin_igv||0);
+    const est=estadoDashboardVehiculo(r);
+    const numero=inicio+i+1;
+    const facturaTitulo=est.factura
+      ? "Factura: "+esc(est.factura)
+      : (est.texto==="No facturado" ? "Aún no tiene factura" : "No se encontró el número de factura");
+    const servicios=obtenerServiciosIndividualesDashboard(r.servicio).map(function(nombreServicio){
+      return '<div style="margin:2px 0;">'+esc(nombreServicio)+'</div>';
+    }).join("");
+    return '<tr>' +
+      '<td class="numero-registro">'+numero+'</td>' +
+      '<td>'+esc(formatearFechaDashboard(r.hora_inicio_lavado||r.created_at))+'</td>' +
+      '<td>'+esc(etiquetaTipoRegistro(r.tipo))+'</td>' +
+      '<td>'+esc(r.ot||"")+'</td>' +
+      '<td>'+esc(r.placa||"")+'</td>' +
+      '<td>'+esc(r.vin||"")+'</td>' +
+      '<td>'+esc(r.marca||"")+'</td>' +
+      '<td>'+servicios+'</td>' +
+      '<td>S/ '+p.toFixed(2)+'</td>' +
+      '<td>S/ '+(p*1.18).toFixed(2)+'</td>' +
+      '<td><span class="facturacion-estado '+est.clase+'" title="'+facturaTitulo+'">'+esc(est.texto)+'</span></td>' +
+      '</tr>';
+  }).join("");
+
+  return '<div class="table-container"><table class="dashboard-table">' +
+    '<thead><tr><th class="numero-registro">N°</th><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>Total</th><th>Estado</th></tr></thead>' +
+    '<tbody>'+(filas || '<tr><td colspan="11" class="dashboard-vacio">Sin registros</td></tr>')+'</tbody>' +
+    '</table></div>' + renderPaginacionDashboardHtml((lista || []).length);
+}
+
+function alternarDetalleDashboard(){
+  dashboardDetalleVisible = !dashboardDetalleVisible;
+  renderDashboard(listaDashboardDetalleActual || []);
+  if(dashboardDetalleVisible){
+    setTimeout(function(){
+      const panel=document.querySelector("#dashboardContenido .dashboard-detalle-panel");
+      if(panel) panel.scrollIntoView({behavior:"smooth",block:"start"});
+    }, 50);
+  }
+}
+
 function renderPaginacionDashboardHtml(totalRegistros){
   const totalPaginas=Math.max(1,Math.ceil(totalRegistros/DASHBOARD_POR_PAGINA));
   if(totalRegistros<=DASHBOARD_POR_PAGINA) return '';
@@ -10769,7 +10844,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.588 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
