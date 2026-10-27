@@ -123,6 +123,19 @@ header p{
     grid-column:1/-1;
 }
 
+/* Distribución solicitada para Regularizar registros */
+#formGridPasado #pasadoCampoOT{order:1;}
+#formGridPasado #pasadoCampoPlaca{order:2;}
+#formGridPasado #pasadoCampoVIN{order:1;}
+#formGridPasado #grupoMarcaPasado{order:3;}
+#formGridPasado #grupoFechaPasado{order:4;}
+#formGridPasado #grupoFotoIngresoPasado{order:5;}
+#formGridPasado #pasadoCampoFotoOT{order:6;}
+#formGridPasado #pasadoCampoFotoVIN{order:2;}
+#formGridPasado #grupoServiciosPasado{order:7;grid-column:1/-1;}
+#formGridPasado #pasadoGrupoObservaciones{order:8;grid-column:1/-1;}
+#formGridPasado #accionesServiciosPasado{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
 /* Orden visual solo para vehículos nuevos:
    VIN / Foto VIN, Marca / Foto de ingreso, Servicios y Observaciones. */
 #formGridRegistrar.tipo-nuevo #campoVIN{order:1;}
@@ -2656,7 +2669,7 @@ onclick="buscarRegistroPasado()">
 
 </div>
 
-<div class="form-grid">
+<div class="form-grid" id="formGridPasado">
 
 <div id="pasadoCampoOT" class="form-group">
 <label>Número de OT</label>
@@ -2673,7 +2686,7 @@ onclick="buscarRegistroPasado()">
 <input id="pasadoVIN" type="text" placeholder="Ingrese VIN" autocomplete="off" style="text-transform:uppercase" oninput="const inicio=this.selectionStart; const fin=this.selectionEnd; this.value=this.value.toUpperCase(); try{this.setSelectionRange(inicio,fin);}catch(e){}">
 </div>
 
-<div class="form-group">
+<div class="form-group" id="grupoMarcaPasado">
 <label>Marca *</label>
 <select id="pasadoMarca">
 <option value="">Seleccione la marca</option>
@@ -2702,14 +2715,19 @@ onclick="buscarRegistroPasado()">
   </div>
 </div>
 
+<div class="servicios-registro-acciones" id="accionesServiciosPasado">
+  <button type="button" id="btnAgregarServicioPasado" class="btn-agregar-servicio-registro" onclick="agregarServicioPasado()"><span aria-hidden="true">＋</span> Agregar servicio</button>
+  <span id="pasadoServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
 </div>
 
-<div class="form-group">
+</div>
+
+<div class="form-group" id="grupoFechaPasado">
 <label>Fecha de ingreso / lavado *</label>
 <input id="pasadoFecha" type="date">
 </div>
 
-<div class="form-group">
+<div class="form-group" id="grupoFotoIngresoPasado">
 <label>Foto de ingreso</label>
 <input id="pasadoFotoIngreso" type="file" accept="image/*" capture="environment">
 </div>
@@ -2724,17 +2742,14 @@ onclick="buscarRegistroPasado()">
 <input id="pasadoFotoVIN" type="file" accept="image/*" capture="environment">
 </div>
 
-<div class="form-group full">
+<div class="form-group full" id="pasadoGrupoObservaciones">
 <label>Observaciones</label>
 <textarea id="pasadoObservaciones" placeholder="Observaciones de la regularización"></textarea>
 </div>
 
 </div>
 
-<div class="servicios-registro-acciones servicios-registro-acciones-final">
-  <button type="button" id="btnAgregarServicioPasado" class="btn-agregar-servicio-registro" onclick="agregarServicioPasado()"><span aria-hidden="true">＋</span> Agregar servicio</button>
-  <span id="pasadoServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
-</div>
+
 
 <div id="loadingPasado" class="loading">⏳ Guardando regularización...</div>
 
@@ -10470,7 +10485,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.225 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
