@@ -4557,26 +4557,55 @@ function tieneMismosDigitosCortos(a,b){
   return !!principalA && !!principalB && principalA === principalB;
 }
 
-async function obtenerTodosLosRegistros(){
+/*
+  Descarga todas las filas de una consulta REST de Supabase por bloques.
+  La API suele devolver como máximo 1,000 filas por petición; usando Range
+  se recuperan también las siguientes páginas (por ejemplo, filas 1000-1999).
+*/
+async function fetchTodosLosRegistrosSupabase(url, headers, tamanoPagina){
+  const pagina = Math.max(1, Number(tamanoPagina) || 1000);
+  const acumulados = [];
+  let inicio = 0;
 
-  const respuesta = await fetch(
-    SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,tipo,ot,placa,vin,marca,servicio,estado,hora_inicio_lavado,created_at,foto_ingreso,foto_ot,foto_vin,foto_final&order=created_at.desc",
-    {
-      method:"GET",
-      headers:{
-        "apikey":SUPABASE_KEY,
-        "Authorization":"Bearer " + SUPABASE_KEY
-      },
-      cache:"no-store"
+  while(true){
+    const cabeceras = Object.assign({}, headers || {}, {
+      "Range-Unit": "items",
+      "Range": inicio + "-" + (inicio + pagina - 1)
+    });
+
+    const respuesta = await fetch(url, {
+      method: "GET",
+      headers: cabeceras,
+      cache: "no-store"
+    });
+
+    if(!respuesta.ok){
+      const texto = await respuesta.text();
+      throw new Error("Supabase HTTP " + respuesta.status + (texto ? ": " + texto : ""));
     }
-  );
 
-  if(!respuesta.ok){
-    const texto = await respuesta.text();
-    throw new Error("Supabase HTTP " + respuesta.status + (texto ? ": " + texto : ""));
+    const filas = await respuesta.json();
+    if(!Array.isArray(filas)){
+      throw new Error("Supabase no devolvió una lista de registros.");
+    }
+
+    acumulados.push.apply(acumulados, filas);
+
+    // Una página incompleta indica que ya llegamos al final.
+    if(filas.length < pagina) break;
+
+    inicio += filas.length;
   }
 
-  return await respuesta.json();
+  return acumulados;
+}
+
+async function obtenerTodosLosRegistros(){
+  const url = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,tipo,ot,placa,vin,marca,servicio,estado,hora_inicio_lavado,created_at,foto_ingreso,foto_ot,foto_vin,foto_final&order=created_at.desc";
+  return await fetchTodosLosRegistrosSupabase(url, {
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + SUPABASE_KEY
+  }, 1000);
 }
 
 function analizarDuplicados(registrosExistentes, datos){
@@ -5590,24 +5619,12 @@ function limpiarRegistroPasado(){
 
 async function cargarSeguimientoSupabase(){
 
-  const respuesta = await fetch(
-    SUPABASE_URL +
-    "/rest/v1/vehiculos_wankamotors?select=*&estado=eq.Lavando&order=created_at.asc",
-    {
-      method:"GET",
-      headers:{
-        "apikey": SUPABASE_KEY,
-        "Authorization": "Bearer " + SUPABASE_KEY
-      },
-      cache:"no-store"
-    }
-  );
-
-  if(!respuesta.ok){
-    throw new Error("Supabase HTTP " + respuesta.status);
-  }
-
-  const filas = await respuesta.json();
+  const url = SUPABASE_URL +
+    "/rest/v1/vehiculos_wankamotors?select=*&estado=eq.Lavando&order=created_at.asc";
+  const filas = await fetchTodosLosRegistrosSupabase(url, {
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + SUPABASE_KEY
+  }, 1000);
 
   return (filas || []).map(function(r){
     return {
@@ -6592,11 +6609,11 @@ function cambiarFiltroHistorial(nombre,checkbox){
 
 async function cargarFiltrosHistorialRelacionados(){
   try{
-    const respuesta=await fetch(SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=tipo,marca&estado=eq.Finalizado&limit=5000",{
-      headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY},cache:"no-store"
-    });
-    if(!respuesta.ok) throw new Error("Supabase HTTP "+respuesta.status);
-    historialCatalogoFiltros=await respuesta.json() || [];
+    const url=SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=tipo,marca&estado=eq.Finalizado";
+    historialCatalogoFiltros=await fetchTodosLosRegistrosSupabase(url,{
+      "apikey":SUPABASE_KEY,
+      "Authorization":"Bearer "+SUPABASE_KEY
+    },1000) || [];
   }catch(error){
     console.warn("No se pudo cargar el catálogo relacionado de Historial:",error);
     historialCatalogoFiltros=[];
@@ -6633,24 +6650,11 @@ tbody.innerHTML = `
 
 try{
 
-const respuesta = await fetch(
-  SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=*&estado=eq.Finalizado&order=hora_inicio_lavado.desc",
-  {
-    method:"GET",
-    headers:{
-      "apikey":SUPABASE_KEY,
-      "Authorization":"Bearer " + SUPABASE_KEY
-    },
-    cache:"no-store"
-  }
-);
-
-if(!respuesta.ok){
-  const textoError = await respuesta.text();
-  throw new Error("Supabase HTTP " + respuesta.status + (textoError ? ": " + textoError : ""));
-}
-
-const filas = await respuesta.json();
+const urlHistorial = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=*&estado=eq.Finalizado&order=hora_inicio_lavado.desc";
+const filas = await fetchTodosLosRegistrosSupabase(urlHistorial,{
+  "apikey":SUPABASE_KEY,
+  "Authorization":"Bearer " + SUPABASE_KEY
+},1000);
 
 const filtrados = (filas || []).map(function(r){
   return {
@@ -7432,15 +7436,11 @@ function leerArchivoComoDataURL(file){
 }
 
 async function cargarRegistrosFacturacion(){
-  const respuesta = await fetch(
-    SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,created_at,hora_inicio_lavado,hora_salida,tipo,ot,placa,vin,marca,modelo,servicio,servicio_id,precio_sin_igv,facturado,fecha_facturacion,estado&order=created_at.desc",
-    {method:"GET",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer " + SUPABASE_KEY},cache:"no-store"}
-  );
-  if(!respuesta.ok){
-    const texto=await respuesta.text();
-    throw new Error("Supabase HTTP " + respuesta.status + (texto ? ": " + texto : ""));
-  }
-  return await respuesta.json();
+  const url=SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,created_at,hora_inicio_lavado,hora_salida,tipo,ot,placa,vin,marca,modelo,servicio,servicio_id,precio_sin_igv,facturado,fecha_facturacion,estado&order=created_at.desc";
+  return await fetchTodosLosRegistrosSupabase(url,{
+    "apikey":SUPABASE_KEY,
+    "Authorization":"Bearer "+SUPABASE_KEY
+  },1000);
 }
 
 function fechaCortaFacturacion(valor){
@@ -10350,10 +10350,11 @@ async function cargarDashboard(){
     const marcas = obtenerSeleccionDashboard('marca');
     const servicios = obtenerSeleccionDashboard('servicio');
     const tipos = obtenerSeleccionDashboard('tipo');
-    let url = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,created_at,hora_inicio_lavado,hora_salida,ot,placa,vin,marca,tipo,servicio,precio_sin_igv,igv,precio_con_igv,facturado,fecha_facturacion,estado&order=created_at.desc";
-    const resp = await fetch(url,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY},cache:"no-store"});
-    if(!resp.ok) throw new Error(await resp.text());
-    registrosDashboard = await resp.json();
+    const url = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,created_at,hora_inicio_lavado,hora_salida,ot,placa,vin,marca,tipo,servicio,precio_sin_igv,igv,precio_con_igv,facturado,fecha_facturacion,estado&order=created_at.desc";
+    registrosDashboard = await fetchTodosLosRegistrosSupabase(url,{
+      "apikey":SUPABASE_KEY,
+      "Authorization":"Bearer "+SUPABASE_KEY
+    },1000);
     await cargarFacturasDashboard();
     poblarFiltrosDashboard(registrosDashboard);
     const filtrados = registrosDashboard.filter(r=>{
@@ -10768,7 +10769,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.588 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
