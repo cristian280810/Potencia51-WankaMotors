@@ -2701,10 +2701,7 @@ onclick="buscarRegistroPasado()">
     </select>
   </div>
 </div>
-<div class="servicios-registro-acciones">
-  <button type="button" id="btnAgregarServicioPasado" class="btn-agregar-servicio-registro" onclick="agregarServicioPasado()"><span aria-hidden="true">＋</span> Agregar servicio</button>
-  <span id="pasadoServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
-</div>
+
 </div>
 
 <div class="form-group">
@@ -2732,6 +2729,11 @@ onclick="buscarRegistroPasado()">
 <textarea id="pasadoObservaciones" placeholder="Observaciones de la regularización"></textarea>
 </div>
 
+</div>
+
+<div class="servicios-registro-acciones servicios-registro-acciones-final">
+  <button type="button" id="btnAgregarServicioPasado" class="btn-agregar-servicio-registro" onclick="agregarServicioPasado()"><span aria-hidden="true">＋</span> Agregar servicio</button>
+  <span id="pasadoServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
 </div>
 
 <div id="loadingPasado" class="loading">⏳ Guardando regularización...</div>
@@ -10468,7 +10470,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V9.5 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
