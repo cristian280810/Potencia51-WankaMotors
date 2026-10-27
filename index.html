@@ -3367,7 +3367,7 @@ id="idFinalizar">
 <div class="form-group">
 
 <label>
-Foto final *
+Foto final (opcional)
 </label>
 
 <input
@@ -6373,32 +6373,44 @@ if(!id){
   throw new Error("No se encontró el vehículo.");
 }
 
-if(!archivo){
-  mostrarAlerta("Debe adjuntar la foto final.","error");
-  return;
-}
-
 boton.disabled = true;
 loading.style.display = "block";
 
-const foto = await comprimirFoto(archivo);
+let fotoFinalGuardada = "";
 
-/* 1. Guardar la foto final exclusivamente en Drive. */
-const respuestaDrive = await enviarDrive({
-  accion:"guardarFotoFinal",
-  id:id,
-  fotoFinal:foto
-});
+/* 1. La foto final es opcional. Si se adjunta, se guarda en Drive. */
+if(archivo){
+  const foto = await comprimirFoto(archivo);
+  const respuestaDrive = await enviarDrive({
+    accion:"guardarFotoFinal",
+    id:id,
+    fotoFinal:foto
+  });
 
-if(!respuestaDrive || respuestaDrive.ok !== true || !respuestaDrive.fotoFinal){
-  throw new Error(
-    respuestaDrive && respuestaDrive.mensaje
-      ? respuestaDrive.mensaje
-      : "No se pudo guardar la foto final en Drive."
-  );
+  if(!respuestaDrive || respuestaDrive.ok !== true || !respuestaDrive.fotoFinal){
+    throw new Error(
+      respuestaDrive && respuestaDrive.mensaje
+        ? respuestaDrive.mensaje
+        : "No se pudo guardar la foto final en Drive."
+    );
+  }
+
+  fotoFinalGuardada = respuestaDrive.fotoFinal;
 }
 
-/* 2. Supabase es la única base de datos. */
+/* 2. Actualizar Supabase y finalizar el lavado, con o sin foto. */
+const datosActualizacion = {
+  estado:"Finalizado",
+  hora_salida:new Date().toISOString(),
+  observaciones_finales:observaciones
+};
+
+// Solo cambiar foto_final si el usuario adjuntó una nueva foto.
+// Si no adjunta archivo, el lavado se finaliza sin tocar este campo.
+if(fotoFinalGuardada){
+  datosActualizacion.foto_final = fotoFinalGuardada;
+}
+
 const respuestaSupabase = await fetch(
   SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?id=eq." + encodeURIComponent(id),
   {
@@ -6409,24 +6421,20 @@ const respuestaSupabase = await fetch(
       "Content-Type":"application/json",
       "Prefer":"return=minimal"
     },
-    body:JSON.stringify({
-      estado:"Finalizado",
-      hora_salida:new Date().toISOString(),
-      observaciones_finales:observaciones,
-      foto_final:respuestaDrive.fotoFinal
-    })
+    body:JSON.stringify(datosActualizacion)
   }
 );
 
 if(!respuestaSupabase.ok){
   const textoError = await respuestaSupabase.text();
   throw new Error(
-    "La foto se guardó en Drive, pero Supabase no pudo actualizar el vehículo. Supabase HTTP " +
+    "Supabase no pudo actualizar el vehículo. Supabase HTTP " +
     respuestaSupabase.status + (textoError ? ": " + textoError : "")
   );
 }
 
 /* 3. Cerrar modal antes de refrescar. */
+document.getElementById("fotoFinal").value = "";
 cerrarModal();
 mostrarAlerta("Lavado finalizado correctamente.","success");
 await cargarDatos();
