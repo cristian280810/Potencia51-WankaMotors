@@ -1196,6 +1196,67 @@ th.col-vin {
   text-transform:none !important;
   opacity:1;
 }
+
+/* Resumen de ítems para ingresar la factura manualmente en SUNAT */
+.factura-items-sunat{
+  margin-top:16px;
+  border:1px solid #dbe3ee;
+  border-radius:10px;
+  background:#fff;
+  overflow:hidden;
+}
+.factura-items-sunat-heading{
+  padding:12px 14px;
+  background:#f8fafc;
+  border-bottom:1px solid #e2e8f0;
+}
+.factura-items-sunat-heading strong{
+  display:block;
+  color:#172033;
+  font-size:14px;
+}
+.factura-items-sunat-heading p{
+  margin:4px 0 0;
+  color:#64748b;
+  font-size:12px;
+  line-height:1.45;
+}
+.factura-items-sunat-scroll{overflow-x:auto;}
+.factura-items-sunat table{
+  width:100%;
+  min-width:610px;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.factura-items-sunat th,
+.factura-items-sunat td{
+  padding:9px 11px;
+  border-bottom:1px solid #e5e7eb;
+}
+.factura-items-sunat thead th{
+  background:#f1f5f9;
+  color:#334155;
+  font-weight:700;
+  text-align:left;
+  white-space:nowrap;
+}
+.factura-items-sunat .sunat-number{
+  text-align:right;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.factura-items-sunat tfoot th{
+  background:#f8fafc;
+  color:#111827;
+  font-weight:700;
+  border-bottom:0;
+}
+.factura-items-sunat-empty{
+  padding:14px;
+  color:#64748b;
+  text-align:center;
+}
+
 </style>
 <style>
 .facturacion-estado.facturado-pagado{background:#dcfce7;color:#166534;}
@@ -2342,7 +2403,7 @@ onclick="limpiarFormulario()">
      MODAL NUEVA FACTURA
 ===================================================== -->
 <div id="modalNuevaFactura" class="modal">
-  <div class="modal-content" style="max-width:700px;">
+  <div class="modal-content" style="max-width:860px;">
     <div class="modal-header">
       <h2>🧾 Emitir factura</h2>
       <button type="button" class="close" onclick="cerrarModalNuevaFactura()">&times;</button>
@@ -2374,6 +2435,33 @@ onclick="limpiarFormulario()">
       <div class="facturacion-card">IGV<strong id="nuevaFacturaIgv">S/ 0.00</strong></div>
       <div class="facturacion-card">Total<strong id="nuevaFacturaTotal">S/ 0.00</strong></div>
     </div>
+    <section class="factura-items-sunat" aria-label="Resumen de ítems para SUNAT">
+      <div class="factura-items-sunat-heading">
+        <strong>🧾 Resumen de ítems para SUNAT</strong>
+        <p>Servicios agrupados por concepto y precio unitario. Usa la cantidad, el precio sin IGV y el importe para registrar cada ítem en SUNAT.</p>
+      </div>
+      <div class="factura-items-sunat-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Descripción del servicio</th>
+              <th class="sunat-number">Cantidad</th>
+              <th class="sunat-number">Precio unitario sin IGV</th>
+              <th class="sunat-number">Importe sin IGV</th>
+            </tr>
+          </thead>
+          <tbody id="nuevaFacturaResumenServiciosBody">
+            <tr><td colspan="4" class="factura-items-sunat-empty">Selecciona los servicios que deseas facturar.</td></tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="3">Total sin IGV</th>
+              <th id="nuevaFacturaResumenServiciosTotal" class="sunat-number">S/ 0.00</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
     <div id="nuevaFacturaDetraccionBox" class="facturacion-pagos-box">
       <h3>💰 Detracción y forma de pago</h3>
       <p id="nuevaFacturaDetraccionTexto" class="facturacion-ayuda">El sistema evaluará automáticamente la detracción sobre el total de la factura.</p>
@@ -8370,6 +8458,49 @@ function obtenerSeleccionadosFacturacion(){
   }).filter(function(r){return r && !estaFacturadoFacturacion(r);});
 }
 
+function renderizarResumenServiciosParaSunat(seleccionados){
+  const cuerpo=document.getElementById("nuevaFacturaResumenServiciosBody");
+  const totalElemento=document.getElementById("nuevaFacturaResumenServiciosTotal");
+  if(!cuerpo || !totalElemento) return;
+
+  const grupos=new Map();
+  (seleccionados || []).forEach(function(registro){
+    const nombre=String(registro.servicio || "Servicio sin nombre").trim() || "Servicio sin nombre";
+    // Los precios de catálogo se manejan con dos decimales.
+    const precio=Number(Number(registro.precio_sin_igv || 0).toFixed(2));
+    const clave=nombre.toLocaleLowerCase("es") + "|" + precio.toFixed(2);
+    if(!grupos.has(clave)){
+      grupos.set(clave,{nombre:nombre,precio:precio,cantidad:0});
+    }
+    grupos.get(clave).cantidad += 1;
+  });
+
+  const items=Array.from(grupos.values()).sort(function(a,b){
+    const comparacion=a.nombre.localeCompare(b.nombre,"es",{sensitivity:"base"});
+    return comparacion || a.precio-b.precio;
+  });
+
+  if(!items.length){
+    cuerpo.innerHTML='<tr><td colspan="4" class="factura-items-sunat-empty">No hay servicios seleccionados.</td></tr>';
+    totalElemento.textContent="S/ 0.00";
+    return;
+  }
+
+  let subtotal=0;
+  cuerpo.innerHTML=items.map(function(item){
+    const importe=Number((item.cantidad*item.precio).toFixed(2));
+    subtotal+=importe;
+    return '<tr>' +
+      '<td>'+esc(item.nombre)+'</td>' +
+      '<td class="sunat-number">'+item.cantidad+'</td>' +
+      '<td class="sunat-number">S/ '+item.precio.toFixed(2)+'</td>' +
+      '<td class="sunat-number">S/ '+importe.toFixed(2)+'</td>' +
+      '</tr>';
+  }).join("");
+
+  totalElemento.textContent="S/ "+subtotal.toFixed(2);
+}
+
 function abrirModalNuevaFactura(){
   const seleccionados=obtenerSeleccionadosFacturacion();
   if(!seleccionados.length){
@@ -8397,6 +8528,7 @@ function abrirModalNuevaFactura(){
   document.getElementById("nuevaFacturaObservaciones").value="";
   document.getElementById("nuevaFacturaArchivo").value="";
   document.getElementById("nuevaFacturaCantidad").textContent=seleccionados.length;
+  renderizarResumenServiciosParaSunat(seleccionados);
   document.getElementById("nuevaFacturaSinIgv").textContent="S/ "+resumen.sinIgv.toFixed(2);
   document.getElementById("nuevaFacturaIgv").textContent="S/ "+resumen.igv.toFixed(2);
   document.getElementById("nuevaFacturaTotal").textContent="S/ "+resumen.total.toFixed(2);
