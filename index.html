@@ -6957,9 +6957,9 @@ function exportarContextoPDF(contexto){
     if(!lista.length){mostrarAlerta('No hay información para exportar.','error');return;}
     const filas=lista.map(function(r){
       const x=calcularImportesFacturacion(r.precio_sin_igv);
-      return `<tr><td>${escaparHtmlExportacion(fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)))}</td><td>${etiquetaTipoRegistro(v.tipo || "Taller")}</td><td>${escaparHtmlExportacion(r.ot||'')}</td><td>${escaparHtmlExportacion(r.placa||'')}</td><td>${escaparHtmlExportacion(r.vin||'')}</td><td>${escaparHtmlExportacion(r.marca||'')}</td><td>${escaparHtmlExportacion(r.servicio||'')}</td><td>S/ ${Number(x.sinIgv||0).toFixed(2)}</td><td>S/ ${Number(x.igv||0).toFixed(2)}</td><td>S/ ${Number(x.total||0).toFixed(2)}</td><td>${r.facturado?'Facturado':'Pendiente'}</td></tr>`;
+      return `<tr><td>${escaparHtmlExportacion(fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)))}</td><td>${escaparHtmlExportacion(etiquetaTipoRegistro(r.tipo || "Taller"))}</td><td>${escaparHtmlExportacion(r.ot||'')}</td><td>${escaparHtmlExportacion(r.placa||'')}</td><td>${escaparHtmlExportacion(r.vin||'')}</td><td>${escaparHtmlExportacion(r.marca||'')}</td><td>${escaparHtmlExportacion(r.servicio||'')}</td><td>S/ ${Number(x.sinIgv||0).toFixed(2)}</td><td>S/ ${Number(x.igv||0).toFixed(2)}</td><td>S/ ${Number(x.total||0).toFixed(2)}</td><td>${estaFacturadoFacturacion(r)?'Facturado':'Pendiente'}</td></tr>`;
     }).join('');
-    abrirVentanaPDF('Facturación Wankamotors',`<table><thead><tr><th>Fecha</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>IGV</th><th>Total</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>`);
+    abrirVentanaPDF('Facturación Wankamotors',`<table><thead><tr><th>Fecha</th><th>Tipo</th><th>OT</th><th>Placa</th><th>VIN</th><th>Marca</th><th>Servicio</th><th>Sin IGV</th><th>IGV</th><th>Total</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>`);
     return;
   }
   if(contexto==='historial'){
@@ -7303,6 +7303,7 @@ return "pendiente";
    FACTURACIÓN
 ===================================================== */
 let registrosFacturacion = [];
+let registrosFacturacionVehiculos = [];
 
 function calcularImportesFacturacion(precioSinIgv){
   const sinIgv = Number(precioSinIgv || 0);
@@ -7370,6 +7371,101 @@ function valorFechaFacturacion(valor){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Lima",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
 }
 function obtenerFechaServicioFacturacion(r){return r.hora_inicio_lavado || r.created_at || "";}
+
+function normalizarNombreServicioFacturacion(nombre){
+  return String(nombre || "").trim().toLocaleLowerCase("es");
+}
+
+function obtenerIdVehiculoFacturacion(registro){
+  return String(registro && (registro.vehiculo_id || registro.id) || "");
+}
+
+function buscarServicioCatalogoFacturacion(nombre){
+  const buscado=normalizarNombreServicioFacturacion(nombre);
+  return (serviciosWankamotors || []).find(function(servicio){
+    return normalizarNombreServicioFacturacion(servicio.nombre_servicio)===buscado;
+  }) || null;
+}
+
+/*
+  Un vehículo puede tener varios servicios guardados en el mismo campo "servicio"
+  separados por " + ". Para Facturación se convierte cada uno en una fila virtual,
+  manteniendo el ID real del vehículo en vehiculo_id y un ID único por servicio en id.
+*/
+function expandirRegistrosFacturacionPorServicios(registros){
+  const salida=[];
+  (registros || []).forEach(function(vehiculo){
+    const texto=String(vehiculo.servicio || "").trim();
+    let nombres=typeof obtenerServiciosIndividualesDashboard === "function"
+      ? obtenerServiciosIndividualesDashboard(texto)
+      : [texto];
+    nombres=(nombres || []).map(function(n){return String(n || "").trim();}).filter(Boolean);
+    if(!nombres.length) nombres=[texto || "Servicio no especificado"];
+
+    nombres.forEach(function(nombre, indice){
+      const catalogo=buscarServicioCatalogoFacturacion(nombre);
+      let precioSinIgv=0;
+      if(nombres.length===1){
+        const guardado=Number(vehiculo.precio_sin_igv);
+        precioSinIgv=Number.isFinite(guardado) ? guardado : Number(catalogo && catalogo.precio_sin_igv || 0);
+      }else if(catalogo){
+        // Cuando una orden contiene varios servicios, cada fila toma el precio
+        // unitario vigente de su propio servicio en el catálogo de Supabase.
+        precioSinIgv=Number(catalogo.precio_sin_igv || 0);
+      }else{
+        precioSinIgv=Number(vehiculo.precio_sin_igv || 0) / nombres.length;
+      }
+
+      salida.push(Object.assign({}, vehiculo, {
+        id:String(vehiculo.id) + "::servicio::" + (catalogo ? String(catalogo.id) : encodeURIComponent(nombre)) + "::" + indice,
+        vehiculo_id:vehiculo.id,
+        servicio:nombre,
+        servicio_id:catalogo ? catalogo.id : (nombres.length===1 ? vehiculo.servicio_id || null : null),
+        precio_sin_igv:Number(precioSinIgv.toFixed(2)),
+        esServicioFacturacion:true,
+        indiceServicioFacturacion:indice,
+        cantidadServiciosVehiculo:nombres.length
+      }));
+    });
+  });
+  return salida;
+}
+
+function detalleFacturaCoincideServicioFacturacion(detalle, registro){
+  if(!detalle || !registro) return false;
+  if(String(detalle.vehiculo_id) !== obtenerIdVehiculoFacturacion(registro)) return false;
+
+  const servicioRegistro=normalizarNombreServicioFacturacion(registro.servicio);
+  const servicioDetalle=String(detalle.servicio || "").trim();
+  if(!servicioRegistro || !servicioDetalle) return false;
+  if(normalizarNombreServicioFacturacion(servicioDetalle)===servicioRegistro) return true;
+
+  // Compatibilidad con facturas antiguas que guardaron la orden completa
+  // en una sola línea de detalle.
+  const serviciosDetalle=typeof obtenerServiciosIndividualesDashboard === "function"
+    ? obtenerServiciosIndividualesDashboard(servicioDetalle)
+    : [servicioDetalle];
+  return (serviciosDetalle || []).some(function(nombre){
+    return normalizarNombreServicioFacturacion(nombre)===servicioRegistro;
+  });
+}
+
+function facturaDashboardEstaAnulada(factura){
+  if(!factura) return true;
+  return String(factura.estado_factura || "").trim().toLowerCase()==="anulada" ||
+         String(factura.estado_pago || "").trim().toLowerCase()==="anulada";
+}
+
+function obtenerFacturaDashboardPorRegistroFacturacion(registro){
+  if(!registro) return null;
+  const detalle=(detallesFacturasDashboard || []).find(function(d){
+    if(!detalleFacturaCoincideServicioFacturacion(d,registro)) return false;
+    const factura=(facturasDashboard || []).find(function(f){return String(f.id)===String(d.factura_id);});
+    return factura && !facturaDashboardEstaAnulada(factura);
+  });
+  if(!detalle) return null;
+  return (facturasDashboard || []).find(function(f){return String(f.id)===String(detalle.factura_id);}) || null;
+}
 
 let facturacionPaginaActual = 1;
 const FACTURACION_POR_PAGINA = 40;
@@ -7509,10 +7605,11 @@ function filtrarOpcionesFacturaFacturacion(){
   const busqueda=String(input?.value||"").trim().toLowerCase();
 
   const baseFacturas=obtenerRegistrosFacturacionParaFaceta("factura");
-  const idsVehiculosBase=new Set(baseFacturas.map(function(r){return String(r.id);}));
   const idsFacturasDisponibles=new Set();
   (detallesFacturasDashboard||[]).forEach(function(d){
-    if(idsVehiculosBase.has(String(d.vehiculo_id))) idsFacturasDisponibles.add(String(d.factura_id));
+    if(baseFacturas.some(function(r){return detalleFacturaCoincideServicioFacturacion(d,r);})){
+      idsFacturasDisponibles.add(String(d.factura_id));
+    }
   });
 
   const facturas=(facturasDashboard||[])
@@ -7712,8 +7809,11 @@ function obtenerRegistrosFacturacionParaFaceta(excluir){
     });
   }
   if(excluir!=="factura" && idsFacturas.length){
-    const idsVehiculos=obtenerIdsVehiculosDeFacturasSeleccionadas() || new Set();
-    base=base.filter(function(r){return idsVehiculos.has(String(r.id));});
+    base=base.filter(function(r){
+      return (detallesFacturasDashboard || []).some(function(d){
+        return idsFacturas.includes(String(d.factura_id)) && detalleFacturaCoincideServicioFacturacion(d,r);
+      });
+    });
   }
   return base;
 }
@@ -7859,22 +7959,24 @@ function actualizarEstadoFiltroFacturacion(){
 function estaFacturadoFacturacion(r){
   if(!r) return false;
 
-  // El campo facturado es la fuente de verdad para liberar/re-facturar.
-  // Si una factura fue anulada, el detalle de la factura puede seguir
-  // existiendo como historial; eso NO debe volver a marcar el vehículo
-  // como facturado.
   const valor=r.facturado;
-  if(valor === true || valor === 1) return true;
-  if(valor === false || valor === 0) return false;
+  const estaMarcadoVehiculo=valor === true || valor === 1 ||
+    (typeof valor === "string" && ["true","1","si","sí","yes","facturado"].includes(valor.trim().toLowerCase()));
 
-  if(typeof valor === "string") {
-    const texto=valor.trim().toLowerCase();
-    if(["true","1","si","sí","yes","facturado"].includes(texto)) return true;
-    if(["false","0","no","null","undefined",""].includes(texto)) return false;
+  // En las filas virtuales, primero se revisa si ESTE servicio tiene detalle
+  // en una factura vigente. Así se puede facturar una parte de la orden sin
+  // bloquear los otros servicios del mismo vehículo.
+  if(r.esServicioFacturacion){
+    if(estaMarcadoVehiculo) return true; // compatibilidad con registros antiguos ya facturados
+    if(obtenerFacturaDashboardPorRegistroFacturacion(r)) return true;
+    if(valor == null) return !!obtenerFacturaDashboardPorVehiculo(obtenerIdVehiculoFacturacion(r));
+    return false;
   }
 
-  // Solo para registros antiguos donde el campo facturado venga realmente
-  // vacío/null, usamos la relación como respaldo.
+  // Para registros no expandidos, se mantiene el comportamiento anterior.
+  if(estaMarcadoVehiculo) return true;
+  if(valor === false || valor === 0) return false;
+  if(typeof valor === "string" && ["false","0","no","null","undefined",""].includes(valor.trim().toLowerCase())) return false;
   if(valor == null) return !!obtenerFacturaDashboardPorVehiculo(r.id);
   return false;
 }
@@ -7898,8 +8000,10 @@ function filtrarFacturacion(){
     const coincideEstado=!estado || (estado==="facturado" ? estaFacturado : !estaFacturado);
     const texto=[r.ot,r.placa,r.vin,r.marca,r.modelo].join(" ").toLowerCase();
 
-    const idsVehiculosFactura=obtenerIdsVehiculosDeFacturasSeleccionadas();
-    const coincideFactura=!idsVehiculosFactura || idsVehiculosFactura.has(String(r.id));
+    const idsFacturasSeleccionadas=Array.from(facturasFiltroFacturacionSeleccionadas);
+    const coincideFactura=!idsFacturasSeleccionadas.length || (detallesFacturasDashboard || []).some(function(d){
+      return idsFacturasSeleccionadas.includes(String(d.factura_id)) && detalleFacturaCoincideServicioFacturacion(d,r);
+    });
 
     return coincideFecha&&coincideTipo&&coincideMarca&&coincideServicio&&coincideEstado&&coincideFactura&&(!buscar||texto.includes(buscar));
   });
@@ -7930,6 +8034,8 @@ function renderFacturacion(){
   pagina.forEach(function(r){
     const x=calcularImportesFacturacion(r.precio_sin_igv);
     const facturado=estaFacturadoFacturacion(r);
+    const facturaServicio=obtenerFacturaDashboardPorRegistroFacturacion(r) || (facturado ? obtenerFacturaDashboardPorVehiculo(obtenerIdVehiculoFacturacion(r)) : null);
+    const fechaFactura=facturaServicio && facturaServicio.fecha_emision ? facturaServicio.fecha_emision : r.fecha_facturacion;
     tbody.innerHTML+=`<tr>
       <td><input type="checkbox" class="facturacion-check fila-facturacion" value="${esc(r.id)}" ${facturado?"disabled":""} ${facturacionSeleccionadosIds.has(String(r.id))?"checked":""} onchange="cambiarSeleccionFacturacion('${esc(r.id)}',this.checked)"></td>
       <td class="numero-registro">${inicio + pagina.indexOf(r) + 1}</td><td>${esc(fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)))}</td>
@@ -7937,8 +8043,8 @@ function renderFacturacion(){
       <td>${esc(r.marca||"")}</td><td>${esc(r.servicio||"")}</td>
       <td>S/ ${x.sinIgv.toFixed(2)}</td><td>S/ ${x.igv.toFixed(2)}</td><td><strong>S/ ${x.total.toFixed(2)}</strong></td>
       <td><span class="facturacion-estado ${facturado?"facturado":"pendiente"}">${facturado?"Facturado":"Pendiente"}</span></td>
-      <td>${facturado && obtenerFacturaDashboardPorVehiculo(r.id) ? `<span class="factura-asociada-badge" title="Factura asociada">🧾 ${esc(obtenerFacturaDashboardPorVehiculo(r.id).numero_factura||"")}</span>` : "—"}</td>
-      <td>${esc(fechaCortaFacturacion(r.fecha_facturacion)||"—")}</td>
+      <td>${facturado && facturaServicio ? `<span class="factura-asociada-badge" title="Factura asociada">🧾 ${esc(facturaServicio.numero_factura||"")}</span>` : "—"}</td>
+      <td>${esc(fechaCortaFacturacion(fechaFactura)||"—")}</td>
     </tr>`;
   });
   if(!lista.length) tbody.innerHTML='<tr><td colspan="15" class="empty">No hay servicios para los filtros seleccionados.</td></tr>';
@@ -7948,7 +8054,7 @@ function renderFacturacion(){
   document.getElementById("facturacionSinIgv").textContent="S/ "+resumenFacturacion.sinIgv.toFixed(2);
   document.getElementById("facturacionIgv").textContent="S/ "+resumenFacturacion.igv.toFixed(2);
   document.getElementById("facturacionTotal").textContent="S/ "+resumenFacturacion.total.toFixed(2);
-  const checksPagina = pagina.filter(function(r){ return !r.facturado; }).map(function(r){ return String(r.id); });
+  const checksPagina = pagina.filter(function(r){ return !estaFacturadoFacturacion(r); }).map(function(r){ return String(r.id); });
   const todosPaginaMarcados = checksPagina.length > 0 && checksPagina.every(function(id){ return facturacionSeleccionadosIds.has(id); });
   const checkCabecera = document.getElementById("facturacionTodos");
   if(checkCabecera) checkCabecera.checked = todosPaginaMarcados;
@@ -8133,8 +8239,12 @@ function mostrarSubmoduloFacturacion(modulo){
 
 async function inicializarFacturacion(){
   try{
-    registrosFacturacion=await cargarRegistrosFacturacion();
+    if(!Array.isArray(serviciosWankamotors) || !serviciosWankamotors.length){
+      await cargarServiciosWankamotors();
+    }
+    registrosFacturacionVehiculos=await cargarRegistrosFacturacion();
     await cargarFacturasDashboard();
+    registrosFacturacion=expandirRegistrosFacturacionPorServicios(registrosFacturacionVehiculos);
     cargarOpcionesFiltroServicioFacturacion();
     actualizarOpcionesEstadoFacturacion();
     actualizarTiposAtencionFacturacion();
@@ -8251,7 +8361,7 @@ function limpiarSeleccionFacturacion(){
 
 function actualizarResumenSeleccionFacturacion(){
   const el=document.getElementById("facturacionSeleccionResumen");
-  if(el) el.textContent=facturacionSeleccionadosIds.size+" registros seleccionados";
+  if(el) el.textContent=facturacionSeleccionadosIds.size+" servicios seleccionados";
 }
 
 function obtenerSeleccionadosFacturacion(){
@@ -8540,6 +8650,7 @@ async function guardarNuevaFactura(){
   if(boton){boton.disabled=true;boton.textContent="⏳ Guardando...";}
 
   let facturaId=null;
+  let estadosVehiculosActualizados=[];
   try{
     // 1. Crear cabecera de factura con detracción calculada automáticamente.
     const respuestaFactura=await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors",{
@@ -8581,7 +8692,7 @@ async function guardarNuevaFactura(){
       const x=calcularImportesFacturacion(r.precio_sin_igv);
       return {
         factura_id:facturaId,
-        vehiculo_id:r.id,
+        vehiculo_id:obtenerIdVehiculoFacturacion(r),
         servicio_id:r.servicio_id || null,
         servicio:r.servicio || "",
         precio_sin_igv:Number(x.sinIgv.toFixed(2)),
@@ -8619,21 +8730,45 @@ async function guardarNuevaFactura(){
       if(!patchArchivo.ok) throw new Error("La factura se guardó en Drive, pero no se pudo guardar su enlace en Supabase: "+await patchArchivo.text());
     }
 
-    // 4. Marcar los vehículos asociados como facturados.
-    const idsFiltro=seleccionados.map(function(r){return String(r.id);}).join(",");
-    const respuestaVehiculos=await fetch(SUPABASE_URL+"/rest/v1/vehiculos_wankamotors?id=in.("+encodeURIComponent(idsFiltro)+")",{
-      method:"PATCH",
-      headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"return=minimal"},
-      body:JSON.stringify({facturado:true,fecha_facturacion:fechaEmision})
-    });
-    if(!respuestaVehiculos.ok) throw new Error("La factura se creó, pero no se pudieron marcar los vehículos como facturados: "+await respuestaVehiculos.text());
+    // 4. Actualizar el estado de cada vehículo según sus servicios.
+    // Si solo se factura una parte de una orden con varios servicios, el vehículo
+    // sigue pendiente hasta que todos sus servicios estén facturados.
+    const clavesSeleccionadas=new Set(seleccionados.map(function(r){return String(r.id);}));
+    const idsVehiculosAfectados=Array.from(new Set(seleccionados.map(obtenerIdVehiculoFacturacion)));
+    for(const vehiculoId of idsVehiculosAfectados){
+      const filasVehiculo=registrosFacturacion.filter(function(r){return obtenerIdVehiculoFacturacion(r)===vehiculoId;});
+      const todosLosServiciosFacturados=filasVehiculo.length>0 && filasVehiculo.every(function(r){
+        return clavesSeleccionadas.has(String(r.id)) || estaFacturadoFacturacion(r);
+      });
+      const original=(registrosFacturacionVehiculos || []).find(function(v){return String(v.id)===vehiculoId;}) || {};
+      const payloadEstado={facturado:todosLosServiciosFacturados,fecha_facturacion:todosLosServiciosFacturados ? fechaEmision : null};
+      const respuestaVehiculo=await fetch(SUPABASE_URL+"/rest/v1/vehiculos_wankamotors?id=eq."+encodeURIComponent(vehiculoId),{
+        method:"PATCH",
+        headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify(payloadEstado)
+      });
+      if(!respuestaVehiculo.ok) throw new Error("La factura se creó, pero no se pudo actualizar el estado del vehículo "+vehiculoId+": "+await respuestaVehiculo.text());
+      estadosVehiculosActualizados.push({id:vehiculoId,facturado:original.facturado == null ? false : original.facturado,fecha_facturacion:original.fecha_facturacion || null});
+    }
 
+    facturacionSeleccionadosIds.clear();
     cerrarModalNuevaFactura();
     mostrarAlerta("Factura "+numero+" creada correctamente. Total S/ "+resumen.total.toFixed(2)+(detraccion.aplica ? ", detracción S/ "+detraccion.monto.toFixed(2)+"." : "."),"success");
     await inicializarFacturacion();
     await cargarFacturasEmitidas();
   }catch(error){
     console.error(error);
+    if(Array.isArray(estadosVehiculosActualizados)){
+      for(const estadoAnterior of estadosVehiculosActualizados){
+        try{
+          await fetch(SUPABASE_URL+"/rest/v1/vehiculos_wankamotors?id=eq."+encodeURIComponent(estadoAnterior.id),{
+            method:"PATCH",
+            headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"return=minimal"},
+            body:JSON.stringify({facturado:estadoAnterior.facturado,fecha_facturacion:estadoAnterior.fecha_facturacion})
+          });
+        }catch(rollbackError){console.warn("No se pudo restaurar el estado anterior del vehículo:",rollbackError);}
+      }
+    }
     if(facturaId){
       try{await fetch(SUPABASE_URL+"/rest/v1/factura_detalle_wankamotors?factura_id=eq."+encodeURIComponent(facturaId),{method:"DELETE",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});}catch(e){}
       try{await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors?id=eq."+encodeURIComponent(facturaId),{method:"DELETE",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});}catch(e){}
@@ -9627,7 +9762,9 @@ function exportarFacturacionExcel(){
   if(typeof XLSX==="undefined"){mostrarAlerta("No se pudo cargar el módulo de Excel.","error");return;}
   const datos=lista.map(function(r){
     const x=calcularImportesFacturacion(r.precio_sin_igv);
-    return {"Fecha":fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)),"OT":r.ot||"","Placa":r.placa||"","VIN":r.vin||"","Marca":r.marca||"","Modelo":r.modelo||"","Taller":r.servicio||"","Precio sin IGV":Number(x.sinIgv.toFixed(2)),"IGV":Number(x.igv.toFixed(2)),"Total con IGV":Number(x.total.toFixed(2)),"Estado":r.facturado?"Facturado":"Pendiente","Factura asociada":(obtenerFacturaDashboardPorVehiculo(r.id)||{}).numero_factura||"","Fecha facturación":fechaCortaFacturacion(r.fecha_facturacion)||""};
+    const facturaServicio=obtenerFacturaDashboardPorRegistroFacturacion(r) || (estaFacturadoFacturacion(r) ? obtenerFacturaDashboardPorVehiculo(obtenerIdVehiculoFacturacion(r)) : null);
+    const fechaFactura=facturaServicio && facturaServicio.fecha_emision ? facturaServicio.fecha_emision : r.fecha_facturacion;
+    return {"Fecha":fechaCortaFacturacion(obtenerFechaServicioFacturacion(r)),"OT":r.ot||"","Placa":r.placa||"","VIN":r.vin||"","Marca":r.marca||"","Modelo":r.modelo||"","Servicio":r.servicio||"","Precio sin IGV":Number(x.sinIgv.toFixed(2)),"IGV":Number(x.igv.toFixed(2)),"Total con IGV":Number(x.total.toFixed(2)),"Estado":estaFacturadoFacturacion(r)?"Facturado":"Pendiente","Factura asociada":(facturaServicio||{}).numero_factura||"","Fecha facturación":fechaCortaFacturacion(fechaFactura)||""};
   });
   const hoja=XLSX.utils.json_to_sheet(datos);const libro=XLSX.utils.book_new();XLSX.utils.book_append_sheet(libro,hoja,"Facturación");XLSX.writeFile(libro,"Facturacion_Wankamotors.xlsx");
 }
@@ -10485,7 +10622,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.75 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
