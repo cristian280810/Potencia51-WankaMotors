@@ -2691,11 +2691,20 @@ onclick="buscarRegistroPasado()">
 </select>
 </div>
 
-<div class="form-group">
-<label>Servicio *</label>
-<select id="pasadoServicio">
-  <option value="">⏳ Cargando servicios...</option>
-</select>
+<div class="form-group" id="grupoServiciosPasado">
+<label>Servicios *</label>
+<p class="servicios-registro-ayuda">Puedes agregar varios servicios a un solo vehículo.</p>
+<div id="pasadoServiciosLista" class="servicios-registro-lista">
+  <div class="servicio-registro-fila">
+    <select id="pasadoServicio" class="servicio-pasado-select" aria-label="Servicio del registro regularizado" onchange="alCambiarServicioPasado(this)">
+      <option value="">⏳ Cargando servicios...</option>
+    </select>
+  </div>
+</div>
+<div class="servicios-registro-acciones">
+  <button type="button" id="btnAgregarServicioPasado" class="btn-agregar-servicio-registro" onclick="agregarServicioPasado()"><span aria-hidden="true">＋</span> Agregar servicio</button>
+  <span id="pasadoServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
+</div>
 </div>
 
 <div class="form-group">
@@ -3599,6 +3608,156 @@ function limpiarServiciosAdicionalesRegistro(){
   if(principal) principal.value = "";
   actualizarOpcionesServiciosRegistro();
   actualizarResumenServiciosRegistro();
+}
+
+function obtenerServiciosSeleccionadosPasado(){
+  const contenedor = document.getElementById("pasadoServiciosLista");
+  if(!contenedor) return [];
+
+  return Array.from(contenedor.querySelectorAll("select.servicio-pasado-select"))
+    .map(function(select){
+      if(!select.value) return null;
+      const servicio = serviciosWankamotors.find(function(s){
+        return String(s.id) === String(select.value);
+      });
+      if(!servicio) return null;
+      return {
+        id: servicio.id,
+        nombre: servicio.nombre_servicio,
+        precioSinIgv: Number(servicio.precio_sin_igv || 0)
+      };
+    })
+    .filter(Boolean);
+}
+
+function actualizarResumenServiciosPasado(){
+  const resumen = document.getElementById("pasadoServiciosResumen");
+  if(!resumen) return;
+  const servicios = obtenerServiciosSeleccionadosPasado();
+  if(!servicios.length){
+    resumen.textContent = "Selecciona uno o más servicios.";
+    return;
+  }
+  resumen.textContent = servicios.length +
+    (servicios.length === 1 ? " servicio seleccionado" : " servicios seleccionados");
+}
+
+function actualizarOpcionesServiciosPasado(){
+  const contenedor = document.getElementById("pasadoServiciosLista");
+  if(!contenedor) return;
+  const selects = Array.from(contenedor.querySelectorAll("select.servicio-pasado-select"));
+  selects.forEach(function(select){
+    const elegidosEnOtros = new Set(selects
+      .filter(function(otro){ return otro !== select && otro.value; })
+      .map(function(otro){ return String(otro.value); }));
+    Array.from(select.options).forEach(function(option){
+      option.disabled = !!option.value && elegidosEnOtros.has(String(option.value));
+    });
+  });
+}
+
+function normalizarServiciosDuplicadosPasado(){
+  const contenedor = document.getElementById("pasadoServiciosLista");
+  if(!contenedor) return;
+  const vistos = new Set();
+  Array.from(contenedor.querySelectorAll("select.servicio-pasado-select")).forEach(function(select){
+    const valor = String(select.value || "");
+    if(!valor) return;
+    if(vistos.has(valor)) select.value = "";
+    else vistos.add(valor);
+  });
+}
+
+function alCambiarServicioPasado(select){
+  normalizarServiciosDuplicadosPasado();
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
+}
+
+function agregarServicioPasado(enfocar){
+  const contenedor = document.getElementById("pasadoServiciosLista");
+  if(!contenedor) return null;
+  if(!Array.isArray(serviciosWankamotors) || !serviciosWankamotors.length){
+    mostrarAlerta("Espera a que cargue el catálogo de servicios antes de agregar otro servicio.","error");
+    return null;
+  }
+
+  const numero = contenedor.querySelectorAll(".servicio-registro-fila").length + 1;
+  const fila = document.createElement("div");
+  fila.className = "servicio-registro-fila";
+
+  const select = document.createElement("select");
+  select.className = "servicio-pasado-select";
+  select.id = "pasadoServicioExtra" + numero + "_" + Date.now();
+  select.setAttribute("aria-label", "Servicio adicional de regularización " + numero);
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Seleccione otro servicio";
+  select.appendChild(placeholder);
+
+  serviciosWankamotors.forEach(function(servicio){
+    const option = document.createElement("option");
+    option.value = String(servicio.id);
+    option.textContent = servicio.nombre_servicio;
+    option.dataset.precioSinIgv = Number(servicio.precio_sin_igv || 0).toFixed(2);
+    select.appendChild(option);
+  });
+  select.addEventListener("change", function(){ alCambiarServicioPasado(select); });
+
+  const quitar = document.createElement("button");
+  quitar.type = "button";
+  quitar.className = "btn-quitar-servicio-registro";
+  quitar.title = "Quitar este servicio";
+  quitar.setAttribute("aria-label", "Quitar servicio adicional de regularización " + numero);
+  quitar.textContent = "−";
+  quitar.addEventListener("click", function(){
+    fila.remove();
+    actualizarOpcionesServiciosPasado();
+    actualizarResumenServiciosPasado();
+  });
+
+  fila.appendChild(select);
+  fila.appendChild(quitar);
+  contenedor.appendChild(fila);
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
+  if(enfocar !== false) select.focus();
+  return select;
+}
+
+function limpiarServiciosAdicionalesPasado(){
+  const contenedor = document.getElementById("pasadoServiciosLista");
+  if(!contenedor) return;
+  Array.from(contenedor.querySelectorAll(".servicio-registro-fila")).slice(1).forEach(function(fila){
+    fila.remove();
+  });
+  const principal = document.getElementById("pasadoServicio");
+  if(principal) principal.value = "";
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
+}
+
+function seleccionarServiciosPasadoPorRegistro(registro){
+  limpiarServiciosAdicionalesPasado();
+  const texto = String(registro && registro.servicio || "Lavado básico").trim();
+  const nombres = typeof obtenerServiciosIndividualesDashboard === "function"
+    ? obtenerServiciosIndividualesDashboard(texto)
+    : [texto];
+  const listaNombres = nombres && nombres.length ? nombres : ["Lavado básico"];
+
+  if(listaNombres.length === 1){
+    seleccionarServicioPorIdONombre("pasadoServicio", registro ? registro.servicio_id : null, listaNombres[0]);
+  }else{
+    seleccionarServicioPorNombre("pasadoServicio", listaNombres[0]);
+    for(let i=1; i<listaNombres.length; i++){
+      const select = agregarServicioPasado(false);
+      if(select) seleccionarServicioPorNombre(select.id, listaNombres[i]);
+    }
+  }
+  normalizarServiciosDuplicadosPasado();
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
 }
 
 function obtenerServicioSeleccionado(selectId){
@@ -4810,7 +4969,7 @@ function seleccionarRegistroPasado(id){
   document.getElementById("pasadoPlaca").value = String(registro.placa || "").toUpperCase();
   document.getElementById("pasadoVIN").value = String(registro.vin || "").toUpperCase();
   document.getElementById("pasadoMarca").value = registro.marca || "";
-  seleccionarServicioPorIdONombre("pasadoServicio", registro.servicio_id, registro.servicio || "Lavado básico");
+  seleccionarServiciosPasadoPorRegistro(registro);
   document.getElementById("pasadoFecha").value = obtenerFechaHistorial(registro.hora_inicio_lavado) || "";
 
   document.getElementById("pasadoFotoIngreso").value = "";
@@ -4955,8 +5114,10 @@ async function guardarRegistroPasado(){
     const vin = normalizarValorInterno(vinIngresadoPasado);
 
     const marca = document.getElementById("pasadoMarca").value;
-    const servicioSeleccionado = obtenerServicioSeleccionado("pasadoServicio");
-    const servicio = servicioSeleccionado ? servicioSeleccionado.nombre : "";
+    const serviciosSeleccionadosPasado = obtenerServiciosSeleccionadosPasado();
+    const filasServiciosPasado = document.querySelectorAll("#pasadoServiciosLista select.servicio-pasado-select").length;
+    const servicio = serviciosSeleccionadosPasado.map(function(s){ return s.nombre; }).join(" + ");
+    const importesServiciosPasado = calcularTotalesServiciosRegistro(serviciosSeleccionadosPasado);
     const fecha = document.getElementById("pasadoFecha").value;
     const observaciones = document.getElementById("pasadoObservaciones").value.trim();
 
@@ -4964,8 +5125,8 @@ async function guardarRegistroPasado(){
     const archivoOT = document.getElementById("pasadoFotoOT").files[0];
     const archivoVIN = document.getElementById("pasadoFotoVIN").files[0];
 
-    if(!marca || !servicioSeleccionado || !fecha){
-      mostrarAlerta("Complete marca, servicio y fecha de ingreso / lavado.","error");
+    if(!marca || !serviciosSeleccionadosPasado.length || serviciosSeleccionadosPasado.length !== filasServiciosPasado || !fecha){
+      mostrarAlerta("Complete marca, seleccione un servicio en cada fila y complete la fecha de ingreso / lavado.","error");
       return;
     }
 
@@ -5080,10 +5241,10 @@ async function guardarRegistroPasado(){
 
       /* Si el registro ya fue facturado, sus precios históricos no se modifican. */
       if(!registroYaFacturado){
-        cambios.servicio_id = servicioSeleccionado.id;
-        cambios.precio_sin_igv = servicioSeleccionado.precioSinIgv;
-        cambios.igv = servicioSeleccionado.igv;
-        cambios.precio_con_igv = servicioSeleccionado.precioConIgv;
+        cambios.servicio_id = serviciosSeleccionadosPasado.length === 1 ? serviciosSeleccionadosPasado[0].id : null;
+        cambios.precio_sin_igv = importesServiciosPasado.sinIgv;
+        cambios.igv = importesServiciosPasado.igv;
+        cambios.precio_con_igv = importesServiciosPasado.conIgv;
       }
 
       if(fotos.fotoIngreso) cambios.foto_ingreso = fotos.fotoIngreso;
@@ -5158,10 +5319,10 @@ async function guardarRegistroPasado(){
         marca:marca,
         modelo:"",
         servicio:servicio,
-        servicio_id:servicioSeleccionado.id,
-        precio_sin_igv:servicioSeleccionado.precioSinIgv,
-        igv:servicioSeleccionado.igv,
-        precio_con_igv:servicioSeleccionado.precioConIgv,
+        servicio_id:serviciosSeleccionadosPasado.length === 1 ? serviciosSeleccionadosPasado[0].id : null,
+        precio_sin_igv:importesServiciosPasado.sinIgv,
+        igv:importesServiciosPasado.igv,
+        precio_con_igv:importesServiciosPasado.conIgv,
         facturado:false,
         fecha_facturacion:null,
         estado:"Finalizado",
@@ -5247,7 +5408,10 @@ function limpiarCamposFormularioPasadoSinResultados(){
     else el.value = "";
   });
 
+  limpiarServiciosAdicionalesPasado();
   seleccionarServicioPorNombre("pasadoServicio", "Lavado básico");
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
 
   const opcionServicio = document.querySelector('input[name="tipoPasado"][value="Taller"]');
   if(opcionServicio) opcionServicio.checked = true;
@@ -5291,7 +5455,10 @@ function limpiarRegistroPasado(){
   document.getElementById("pasadoPlaca").value = "";
   document.getElementById("pasadoVIN").value = "";
   document.getElementById("pasadoMarca").value = "";
+  limpiarServiciosAdicionalesPasado();
   seleccionarServicioPorNombre("pasadoServicio", "Lavado básico");
+  actualizarOpcionesServiciosPasado();
+  actualizarResumenServiciosPasado();
   document.getElementById("pasadoFecha").value = "";
   document.getElementById("pasadoObservaciones").value = "";
   document.getElementById("pasadoFotoIngreso").value = "";
@@ -10301,7 +10468,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V9.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
