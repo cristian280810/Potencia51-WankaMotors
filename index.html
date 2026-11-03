@@ -7500,7 +7500,11 @@ function normalizarNombreServicioFacturacion(nombre){
 }
 
 function obtenerIdVehiculoFacturacion(registro){
-  return String(registro && (registro.vehiculo_id || registro.id) || "");
+  if(!registro) return "";
+  const id = registro.vehiculo_id !== undefined && registro.vehiculo_id !== null
+    ? registro.vehiculo_id
+    : (registro.id !== undefined && registro.id !== null ? registro.id : "");
+  return String(id).trim();
 }
 
 function buscarServicioCatalogoFacturacion(nombre){
@@ -7556,7 +7560,7 @@ function expandirRegistrosFacturacionPorServicios(registros){
 
 function detalleFacturaCoincideServicioFacturacion(detalle, registro){
   if(!detalle || !registro) return false;
-  if(String(detalle.vehiculo_id) !== obtenerIdVehiculoFacturacion(registro)) return false;
+  if(String(detalle.vehiculo_id || "").trim() !== obtenerIdVehiculoFacturacion(registro)) return false;
 
   const servicioRegistro=normalizarNombreServicioFacturacion(registro.servicio);
   const servicioDetalle=String(detalle.servicio || "").trim();
@@ -8164,7 +8168,10 @@ function renderFacturacion(){
   pagina.forEach(function(r){
     const x=calcularImportesFacturacion(r.precio_sin_igv);
     const facturado=estaFacturadoFacturacion(r);
-    const facturaServicio=obtenerFacturaDashboardPorRegistroFacturacion(r) || (facturado ? obtenerFacturaDashboardPorVehiculo(obtenerIdVehiculoFacturacion(r)) : null);
+    // Para la columna "Factura asociada" se prioriza la relación directa
+    // vehículo -> detalle de factura -> factura. La asociación no debe depender
+    // de que el estado facturado o el texto del servicio estén sincronizados.
+    const facturaServicio=obtenerFacturaDashboardPorVehiculo(obtenerIdVehiculoFacturacion(r)) || obtenerFacturaDashboardPorRegistroFacturacion(r);
     const fechaFactura=facturaServicio && facturaServicio.fecha_emision ? facturaServicio.fecha_emision : r.fecha_facturacion;
     tbody.innerHTML+=`<tr>
       <td><input type="checkbox" class="facturacion-check fila-facturacion" value="${esc(r.id)}" ${facturado?"disabled":""} ${facturacionSeleccionadosIds.has(String(r.id))?"checked":""} onchange="cambiarSeleccionFacturacion('${esc(r.id)}',this.checked)"></td>
@@ -8173,7 +8180,7 @@ function renderFacturacion(){
       <td>${esc(r.marca||"")}</td><td>${esc(r.servicio||"")}</td>
       <td>S/ ${x.sinIgv.toFixed(2)}</td><td>S/ ${x.igv.toFixed(2)}</td><td><strong>S/ ${x.total.toFixed(2)}</strong></td>
       <td><span class="facturacion-estado ${facturado?"facturado":"pendiente"}">${facturado?"Facturado":"Pendiente"}</span></td>
-      <td>${facturado && facturaServicio ? `<span class="factura-asociada-badge" title="Factura asociada">🧾 ${esc(facturaServicio.numero_factura||"")}</span>` : "—"}</td>
+      <td>${facturaServicio && String(facturaServicio.numero_factura||"").trim() ? `<span class="factura-asociada-badge" title="Factura asociada">🧾 ${esc(facturaServicio.numero_factura)}</span>` : "—"}</td>
       <td>${esc(fechaCortaFacturacion(fechaFactura)||"—")}</td>
     </tr>`;
   });
@@ -10245,11 +10252,11 @@ async function cargarFacturasDashboard(){
   // Es importante no usar una sola petición: Supabase puede limitar el
   // resultado a 1,000 filas y dejar fuera facturas o detalles recientes.
   const urlFacturas=SUPABASE_URL+
-    "/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,periodo_facturacion,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion,created_at&order=created_at.asc";
+    "/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,periodo_facturacion,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion,created_at&order=created_at.asc,id.asc";
   facturasDashboard=await fetchTodosLosRegistrosSupabase(urlFacturas,headers,1000);
 
   const urlDetalles=SUPABASE_URL+
-    "/rest/v1/factura_detalle_wankamotors?select=factura_id,vehiculo_id,servicio,precio_sin_igv,precio_con_igv";
+    "/rest/v1/factura_detalle_wankamotors?select=factura_id,vehiculo_id,servicio,precio_sin_igv,precio_con_igv&order=vehiculo_id.asc,factura_id.asc,servicio.asc";
   detallesFacturasDashboard=await fetchTodosLosRegistrosSupabase(urlDetalles,headers,1000);
 }
 
@@ -10262,15 +10269,25 @@ function ordenarFacturasVigentesMasRecientesPrimero(lista){
 }
 
 function obtenerFacturaDashboardPorVehiculo(vehiculoId){
-  const idsFacturas=(detallesFacturasDashboard || [])
-    .filter(function(d){return String(d.vehiculo_id)===String(vehiculoId);})
-    .map(function(d){return String(d.factura_id);});
+  const idVehiculo=String(vehiculoId == null ? "" : vehiculoId).trim();
+  if(!idVehiculo) return null;
 
-  if(!idsFacturas.length) return null;
+  // La relación principal es la misma que se valida en SQL:
+  // factura_detalle_wankamotors.vehiculo_id = vehiculos_wankamotors.id.
+  // No depende del nombre del servicio, porque ese texto pudo variar
+  // entre la orden y el detalle histórico de la factura.
+  const idsFacturas=new Set((detallesFacturasDashboard || [])
+    .filter(function(d){
+      return String(d.vehiculo_id == null ? "" : d.vehiculo_id).trim() === idVehiculo;
+    })
+    .map(function(d){return String(d.factura_id == null ? "" : d.factura_id).trim();})
+    .filter(Boolean));
+
+  if(!idsFacturas.size) return null;
 
   // Ignorar facturas anuladas y preferir la factura vigente más reciente.
   const candidatas=(facturasDashboard || []).filter(function(f){
-    return idsFacturas.includes(String(f.id)) && !facturaDashboardEstaAnulada(f);
+    return idsFacturas.has(String(f.id == null ? "" : f.id).trim()) && !facturaDashboardEstaAnulada(f);
   });
 
   return ordenarFacturasVigentesMasRecientesPrimero(candidatas)[0] || null;
