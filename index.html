@@ -7581,13 +7581,20 @@ function facturaDashboardEstaAnulada(factura){
 
 function obtenerFacturaDashboardPorRegistroFacturacion(registro){
   if(!registro) return null;
-  const detalle=(detallesFacturasDashboard || []).find(function(d){
-    if(!detalleFacturaCoincideServicioFacturacion(d,registro)) return false;
-    const factura=(facturasDashboard || []).find(function(f){return String(f.id)===String(d.factura_id);});
-    return factura && !facturaDashboardEstaAnulada(factura);
+
+  // Puede existir una asociación histórica anulada y otra posterior vigente.
+  // Buscar entre todas las coincidencias y elegir la factura activa más reciente.
+  const idsFacturasVigentes=(detallesFacturasDashboard || [])
+    .filter(function(d){return detalleFacturaCoincideServicioFacturacion(d,registro);})
+    .map(function(d){return String(d.factura_id);});
+
+  if(!idsFacturasVigentes.length) return null;
+
+  const candidatas=(facturasDashboard || []).filter(function(f){
+    return idsFacturasVigentes.includes(String(f.id)) && !facturaDashboardEstaAnulada(f);
   });
-  if(!detalle) return null;
-  return (facturasDashboard || []).find(function(f){return String(f.id)===String(detalle.factura_id);}) || null;
+
+  return ordenarFacturasVigentesMasRecientesPrimero(candidatas)[0] || null;
 }
 
 let facturacionPaginaActual = 1;
@@ -10229,26 +10236,44 @@ let facturasDashboard = [];
 let detallesFacturasDashboard = [];
 
 async function cargarFacturasDashboard(){
-  const headers={"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY};
-  const respuesta = await fetch(SUPABASE_URL+"/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,periodo_facturacion,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion&order=fecha_emision.asc,created_at.asc",{
-    method:"GET",headers:headers,cache:"no-store"
-  });
-  if(!respuesta.ok) throw new Error("No se pudieron cargar las facturas del Dashboard: "+await respuesta.text());
-  facturasDashboard = await respuesta.json();
+  const headers={
+    "apikey":SUPABASE_KEY,
+    "Authorization":"Bearer "+SUPABASE_KEY
+  };
 
-  // Relación factura -> vehículo para poder mostrar el estado real de pago
-  // en cada registro del detalle del Dashboard.
-  const respuestaDetalle = await fetch(SUPABASE_URL+"/rest/v1/factura_detalle_wankamotors?select=factura_id,vehiculo_id,servicio,precio_sin_igv,precio_con_igv",{
-    method:"GET",headers:headers,cache:"no-store"
+  // Cargar todas las facturas y todos sus detalles por bloques.
+  // Es importante no usar una sola petición: Supabase puede limitar el
+  // resultado a 1,000 filas y dejar fuera facturas o detalles recientes.
+  const urlFacturas=SUPABASE_URL+
+    "/rest/v1/facturas_wankamotors?select=id,numero_factura,fecha_emision,periodo_facturacion,total_con_igv,estado_pago,estado_factura,fecha_pago,aplica_detraccion,monto_detraccion,monto_pago_directo,fecha_pago_directo,fecha_detraccion,estado_detraccion,created_at&order=created_at.asc";
+  facturasDashboard=await fetchTodosLosRegistrosSupabase(urlFacturas,headers,1000);
+
+  const urlDetalles=SUPABASE_URL+
+    "/rest/v1/factura_detalle_wankamotors?select=factura_id,vehiculo_id,servicio,precio_sin_igv,precio_con_igv";
+  detallesFacturasDashboard=await fetchTodosLosRegistrosSupabase(urlDetalles,headers,1000);
+}
+
+function ordenarFacturasVigentesMasRecientesPrimero(lista){
+  return (lista || []).slice().sort(function(a,b){
+    const fechaA=new Date(a.created_at || a.fecha_emision || 0).getTime() || 0;
+    const fechaB=new Date(b.created_at || b.fecha_emision || 0).getTime() || 0;
+    return fechaB-fechaA;
   });
-  if(!respuestaDetalle.ok) throw new Error("No se pudieron cargar los detalles de las facturas: "+await respuestaDetalle.text());
-  detallesFacturasDashboard = await respuestaDetalle.json();
 }
 
 function obtenerFacturaDashboardPorVehiculo(vehiculoId){
-  const detalle=(detallesFacturasDashboard||[]).find(function(d){return String(d.vehiculo_id)===String(vehiculoId);});
-  if(!detalle) return null;
-  return (facturasDashboard||[]).find(function(f){return String(f.id)===String(detalle.factura_id);}) || null;
+  const idsFacturas=(detallesFacturasDashboard || [])
+    .filter(function(d){return String(d.vehiculo_id)===String(vehiculoId);})
+    .map(function(d){return String(d.factura_id);});
+
+  if(!idsFacturas.length) return null;
+
+  // Ignorar facturas anuladas y preferir la factura vigente más reciente.
+  const candidatas=(facturasDashboard || []).filter(function(f){
+    return idsFacturas.includes(String(f.id)) && !facturaDashboardEstaAnulada(f);
+  });
+
+  return ordenarFacturasVigentesMasRecientesPrimero(candidatas)[0] || null;
 }
 
 function estadoDashboardVehiculo(r){
