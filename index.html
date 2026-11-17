@@ -5072,6 +5072,17 @@ function configurarFiltrosExclusivosPasados(){
 
 document.addEventListener("DOMContentLoaded", function(){
   configurarFiltrosExclusivosPasados();
+
+  // Permitir buscar registros pasados con Enter, además del botón Buscar.
+  const campoBuscarPasado = document.getElementById("buscarPasado");
+  if(campoBuscarPasado){
+    campoBuscarPasado.addEventListener("keydown", function(event){
+      if(event.key === "Enter"){
+        event.preventDefault();
+        buscarRegistroPasado();
+      }
+    });
+  }
 });
 
 
@@ -11163,7 +11174,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.566 Dashboard</div>
+<div class="version-app">V5.5 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
