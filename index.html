@@ -3306,6 +3306,23 @@ id="tablaHistorial">
       </div>
     </div>
 
+    <div class="form-group" id="grupoServiciosEdicion" style="margin-top:14px;">
+      <label>Servicios del vehículo</label>
+      <p class="servicios-registro-ayuda">Puedes conservar el servicio actual y agregar otros, como Undercoating o Encerado.</p>
+      <div id="editarServiciosLista" class="servicios-registro-lista">
+        <div class="servicio-registro-fila">
+          <select id="editarServicio" class="servicio-edicion-select" aria-label="Servicio del vehículo al editar">
+            <option value="">⏳ Cargando servicios...</option>
+          </select>
+        </div>
+      </div>
+      <div class="servicios-registro-acciones">
+        <button type="button" id="btnAgregarServicioEdicion" class="btn-agregar-servicio-registro" onclick="agregarServicioEdicion()"><span aria-hidden="true">＋</span> Agregar servicio</button>
+        <span id="editarServiciosResumen" class="servicios-registro-resumen">Selecciona uno o más servicios.</span>
+      </div>
+      <small id="editarServiciosAviso" style="display:block;margin-top:6px;color:#64748b;"></small>
+    </div>
+
     <div class="form-grid" style="margin-top:12px;">
       <div class="form-group">
         <label>Foto de ingreso</label>
@@ -5673,6 +5690,11 @@ async function cargarSeguimientoSupabase(){
       marca: r.marca || "",
       modelo: r.modelo || "",
       servicio: r.servicio || "",
+      servicio_id: r.servicio_id || null,
+      precio_sin_igv: Number(r.precio_sin_igv || 0),
+      igv: Number(r.igv || 0),
+      precio_con_igv: Number(r.precio_con_igv || 0),
+      facturado: !!r.facturado,
       estado: r.estado || "",
       horaInicio: r.hora_inicio_lavado || r.created_at || "",
       horaSalida: r.hora_salida || "",
@@ -6077,7 +6099,166 @@ function renderSeguimiento(){
    EDITAR DATOS DEL VEHÍCULO
 ===================================================== */
 
-function abrirEditar(id){
+let registroEditarFacturado = false;
+
+function obtenerServiciosSeleccionadosEdicion(){
+  const contenedor = document.getElementById("editarServiciosLista");
+  if(!contenedor) return [];
+
+  return Array.from(contenedor.querySelectorAll("select.servicio-edicion-select"))
+    .map(function(select){
+      if(!select.value) return null;
+      const servicio = serviciosWankamotors.find(function(s){
+        return String(s.id) === String(select.value);
+      });
+      if(!servicio) return null;
+      return {
+        id: servicio.id,
+        nombre: servicio.nombre_servicio,
+        precioSinIgv: Number(servicio.precio_sin_igv || 0)
+      };
+    })
+    .filter(Boolean);
+}
+
+function actualizarResumenServiciosEdicion(){
+  const resumen = document.getElementById("editarServiciosResumen");
+  if(!resumen) return;
+  const servicios = obtenerServiciosSeleccionadosEdicion();
+  if(!servicios.length){
+    resumen.textContent = "Selecciona uno o más servicios.";
+    return;
+  }
+  resumen.textContent = servicios.length +
+    (servicios.length === 1 ? " servicio seleccionado" : " servicios seleccionados");
+}
+
+function actualizarOpcionesServiciosEdicion(){
+  const contenedor = document.getElementById("editarServiciosLista");
+  if(!contenedor) return;
+  const selects = Array.from(contenedor.querySelectorAll("select.servicio-edicion-select"));
+  selects.forEach(function(select){
+    const elegidosEnOtros = new Set(selects
+      .filter(function(otro){ return otro !== select && otro.value; })
+      .map(function(otro){ return String(otro.value); }));
+    Array.from(select.options).forEach(function(option){
+      option.disabled = !!option.value && elegidosEnOtros.has(String(option.value));
+    });
+  });
+}
+
+function alCambiarServicioEdicion(select){
+  const contenedor = document.getElementById("editarServiciosLista");
+  if(!contenedor) return;
+  const vistos = new Set();
+  Array.from(contenedor.querySelectorAll("select.servicio-edicion-select")).forEach(function(item){
+    const valor = String(item.value || "");
+    if(!valor) return;
+    if(vistos.has(valor)) item.value = "";
+    else vistos.add(valor);
+  });
+  actualizarOpcionesServiciosEdicion();
+  actualizarResumenServiciosEdicion();
+}
+
+function agregarServicioEdicion(enfocar, cargarExistente){
+  const contenedor = document.getElementById("editarServiciosLista");
+  if(!contenedor) return null;
+  if(registroEditarFacturado && cargarExistente !== true){
+    mostrarAlerta("Este vehículo ya está facturado. No se pueden modificar sus servicios desde Seguimiento.","error");
+    return null;
+  }
+  if(!Array.isArray(serviciosWankamotors) || !serviciosWankamotors.length){
+    mostrarAlerta("Espera a que cargue el catálogo de servicios antes de agregar otro servicio.","error");
+    return null;
+  }
+
+  const numero = contenedor.querySelectorAll(".servicio-registro-fila").length + 1;
+  const fila = document.createElement("div");
+  fila.className = "servicio-registro-fila";
+
+  const select = document.createElement("select");
+  select.className = "servicio-edicion-select";
+  select.id = "editarServicioExtra" + numero + "_" + Date.now();
+  select.setAttribute("aria-label", "Servicio adicional " + numero);
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Seleccione otro servicio";
+  select.appendChild(placeholder);
+
+  serviciosWankamotors.forEach(function(servicio){
+    const option = document.createElement("option");
+    option.value = String(servicio.id);
+    option.textContent = servicio.nombre_servicio;
+    option.dataset.precioSinIgv = Number(servicio.precio_sin_igv || 0).toFixed(2);
+    select.appendChild(option);
+  });
+  select.addEventListener("change", function(){ alCambiarServicioEdicion(select); });
+
+  const quitar = document.createElement("button");
+  quitar.type = "button";
+  quitar.className = "btn-quitar-servicio-registro";
+  quitar.title = "Quitar este servicio";
+  quitar.setAttribute("aria-label", "Quitar servicio adicional " + numero);
+  quitar.textContent = "−";
+  quitar.addEventListener("click", function(){
+    fila.remove();
+    actualizarOpcionesServiciosEdicion();
+    actualizarResumenServiciosEdicion();
+  });
+
+  fila.appendChild(select);
+  fila.appendChild(quitar);
+  contenedor.appendChild(fila);
+  actualizarOpcionesServiciosEdicion();
+  actualizarResumenServiciosEdicion();
+  if(enfocar !== false) select.focus();
+  return select;
+}
+
+function limpiarServiciosAdicionalesEdicion(){
+  const contenedor = document.getElementById("editarServiciosLista");
+  if(!contenedor) return;
+  Array.from(contenedor.querySelectorAll(".servicio-registro-fila")).slice(1).forEach(function(fila){
+    fila.remove();
+  });
+  const principal = document.getElementById("editarServicio");
+  if(principal) principal.value = "";
+  actualizarOpcionesServiciosEdicion();
+  actualizarResumenServiciosEdicion();
+}
+
+function seleccionarServiciosEdicionPorRegistro(registro){
+  limpiarServiciosAdicionalesEdicion();
+  const texto = String(registro && registro.servicio || "").trim();
+  const nombres = typeof obtenerServiciosIndividualesDashboard === "function"
+    ? obtenerServiciosIndividualesDashboard(texto)
+    : (texto ? [texto] : []);
+  const listaNombres = nombres && nombres.length ? nombres : [];
+
+  if(listaNombres.length){
+    const principal = document.getElementById("editarServicio");
+    const primerServicio = serviciosWankamotors.find(function(s){
+      return String(s.id) === String(registro && registro.servicio_id || "");
+    });
+    if(primerServicio){
+      principal.value = String(primerServicio.id);
+    }else{
+      seleccionarServicioPorNombre("editarServicio", listaNombres[0]);
+    }
+
+    for(let i=1; i<listaNombres.length; i++){
+      const select = agregarServicioEdicion(false, true);
+      if(select) seleccionarServicioPorNombre(select.id, listaNombres[i]);
+    }
+  }
+
+  actualizarOpcionesServiciosEdicion();
+  actualizarResumenServiciosEdicion();
+}
+
+async function abrirEditar(id){
 
   const registro = registros.find(function(r){
     return String(r.id) === String(id);
@@ -6088,11 +6269,52 @@ function abrirEditar(id){
     return;
   }
 
+  try{
+    if(!Array.isArray(serviciosWankamotors) || !serviciosWankamotors.length){
+      await cargarServiciosWankamotors();
+    }
+  }catch(error){
+    mostrarAlerta("No se pudo cargar el catálogo de servicios para editar: " + error.message,"error");
+    return;
+  }
+
   document.getElementById("idEditar").value = registro.id || "";
   document.getElementById("editarOT").value = registro.ot || "";
   document.getElementById("editarPlaca").value = registro.placa || "";
   document.getElementById("editarVIN").value = registro.vin || "";
   document.getElementById("editarMarca").value = registro.marca || "";
+
+  registroEditarFacturado = !!registro.facturado;
+  const grupoServicios = document.getElementById("grupoServiciosEdicion");
+  const botonAgregarServicio = document.getElementById("btnAgregarServicioEdicion");
+  const avisoServicios = document.getElementById("editarServiciosAviso");
+
+  // Cargar el catálogo activo en el selector principal del modal.
+  const selectServicio = document.getElementById("editarServicio");
+  selectServicio.innerHTML = '<option value="">Seleccione el servicio</option>';
+  serviciosWankamotors.forEach(function(servicio){
+    const option = document.createElement("option");
+    option.value = String(servicio.id);
+    option.textContent = servicio.nombre_servicio;
+    option.dataset.precioSinIgv = Number(servicio.precio_sin_igv || 0).toFixed(2);
+    selectServicio.appendChild(option);
+  });
+  selectServicio.onchange = function(){ alCambiarServicioEdicion(selectServicio); };
+
+  seleccionarServiciosEdicionPorRegistro(registro);
+
+  // No se permite cambiar los servicios de un vehículo ya facturado,
+  // para evitar diferencias entre el detalle de factura y el registro.
+  Array.from(document.querySelectorAll("#editarServiciosLista select, #editarServiciosLista button")).forEach(function(control){
+    control.disabled = registroEditarFacturado;
+  });
+  if(botonAgregarServicio) botonAgregarServicio.disabled = registroEditarFacturado;
+  if(grupoServicios) grupoServicios.style.opacity = registroEditarFacturado ? "0.72" : "1";
+  if(avisoServicios){
+    avisoServicios.textContent = registroEditarFacturado
+      ? "Este vehículo ya está facturado. Los servicios quedan bloqueados para proteger la información de la factura emitida."
+      : "Al guardar, se actualizarán los importes sin IGV, IGV y total según los servicios seleccionados.";
+  }
 
   const inputIngreso = document.getElementById("editarFotoIngreso");
   const inputOT = document.getElementById("editarFotoOT");
@@ -6217,6 +6439,27 @@ async function guardarEdicion(){
       marca: marca
     };
 
+    // Actualizar los servicios e importes solo si el registro todavía no fue facturado.
+    if(!registroEditarFacturado){
+      const serviciosSeleccionados = obtenerServiciosSeleccionadosEdicion();
+      if(!serviciosSeleccionados.length){
+        throw new Error("Selecciona al menos un servicio para el vehículo.");
+      }
+
+      const nombresServicios = serviciosSeleccionados.map(function(servicio){ return servicio.nombre; });
+      const totalSinIgv = Number(serviciosSeleccionados.reduce(function(total, servicio){
+        return total + Number(servicio.precioSinIgv || 0);
+      }, 0).toFixed(2));
+      const totalIgv = Number((totalSinIgv * IGV_WANKAMOTORS).toFixed(2));
+      const totalConIgv = Number((totalSinIgv + totalIgv).toFixed(2));
+
+      cambios.servicio = nombresServicios.join(" + ");
+      cambios.servicio_id = serviciosSeleccionados.length === 1 ? serviciosSeleccionados[0].id : null;
+      cambios.precio_sin_igv = totalSinIgv;
+      cambios.igv = totalIgv;
+      cambios.precio_con_igv = totalConIgv;
+    }
+
     if(!registro.fotoIngreso && fotosActualizadas.fotoIngreso){
       cambios.foto_ingreso = fotosActualizadas.fotoIngreso;
     }
@@ -6260,9 +6503,13 @@ async function guardarEdicion(){
 
     cerrarEditar();
     mostrarAlerta(
-      subioFotos
-        ? "Los datos y las fotografías faltantes fueron actualizados correctamente."
-        : "Los datos del vehículo fueron actualizados correctamente.",
+      !registroEditarFacturado
+        ? (subioFotos
+            ? "Los datos, servicios y las fotografías faltantes fueron actualizados correctamente."
+            : "Los datos y servicios del vehículo fueron actualizados correctamente.")
+        : (subioFotos
+            ? "Los datos y las fotografías faltantes fueron actualizados correctamente."
+            : "Los datos del vehículo fueron actualizados correctamente."),
       "success"
     );
 
@@ -6286,7 +6533,6 @@ async function guardarEdicion(){
     loading.style.display = "none";
   }
 }
-
 
 /* =====================================================
    INICIAR LAVADO
@@ -10917,7 +11163,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.566 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
