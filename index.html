@@ -7565,6 +7565,27 @@ document.addEventListener(
   }
 );
 
+// Permitir cerrar/aceptar cualquier mensaje emergente usando Enter.
+// Se escucha en captura para evitar que Enter active controles del formulario
+// que queda detrás del popup.
+document.addEventListener(
+  "keydown",
+  function(event){
+    if(event.key !== "Enter") return;
+
+    const popup = document.getElementById("popupMensaje");
+    if(!popup || !popup.classList.contains("active")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if(typeof event.stopImmediatePropagation === "function"){
+      event.stopImmediatePropagation();
+    }
+    cerrarPopup();
+  },
+  true
+);
+
 
 /* =====================================================
    ALERTAS
