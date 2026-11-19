@@ -11025,21 +11025,33 @@ function renderDashboard(lista){
 
   const porMarca = {};
   const porServicio = {};
+  const marcasSeleccionadasDashboard=obtenerSeleccionDashboard('marca');
+  const serviciosSeleccionadosDashboard=obtenerSeleccionDashboard('servicio');
   lista.forEach(r=>{
     const m=String(r.marca||"Sin marca").trim()||"Sin marca";
     const serviciosIndividuales=obtenerServiciosIndividualesDashboard(r.servicio);
     porMarca[m]=(porMarca[m]||0)+1;
 
-    if(!serviciosIndividuales.length){
-      porServicio["Sin servicio"]=(porServicio["Sin servicio"]||0)+1;
+    // Si hay uno o más servicios seleccionados en el filtro, el gráfico
+    // "Servicios realizados" cuenta exclusivamente esos servicios.
+    // El registro completo sigue participando en los demás indicadores
+    // del Dashboard; solo se restringe la serie de este gráfico.
+    const serviciosParaGrafico = serviciosSeleccionadosDashboard.length
+      ? serviciosIndividuales.filter(function(sv){
+          return serviciosSeleccionadosDashboard.includes(sv);
+        })
+      : serviciosIndividuales;
+
+    if(!serviciosParaGrafico.length){
+      if(!serviciosSeleccionadosDashboard.length){
+        porServicio["Sin servicio"]=(porServicio["Sin servicio"]||0)+1;
+      }
     }else{
-      serviciosIndividuales.forEach(function(sv){
+      serviciosParaGrafico.forEach(function(sv){
         porServicio[sv]=(porServicio[sv]||0)+1;
       });
     }
   });
-  const marcasSeleccionadasDashboard=obtenerSeleccionDashboard('marca');
-  const serviciosSeleccionadosDashboard=obtenerSeleccionDashboard('servicio');
   const barras = (obj,nombreFiltro,seleccionados)=>{const arr=Object.entries(obj).sort((a,b)=>b[1]-a[1]);const max=arr.length?arr[0][1]:1;return arr.slice(0,10).map(([k,v])=>{const activo=seleccionados.indexOf(k)>=0?' activo':'';const valorGrafico=encodeURIComponent(k);return `<div class="dashboard-bar-row dashboard-clickable${activo}" title="Clic para filtrar por ${esc(k)}" onclick="aplicarFiltroGraficoDashboard('${nombreFiltro}','${valorGrafico}')"><span>${esc(k)}</span><div class="dashboard-bar"><span style="width:${(v/max*100).toFixed(1)}%"></span></div><strong>${v}</strong></div>`;}).join("") || '<div class="dashboard-vacio">Sin datos</div>';};
 
   cont.innerHTML = `
