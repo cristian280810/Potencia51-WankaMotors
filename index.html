@@ -4718,7 +4718,7 @@ async function fetchTodosLosRegistrosSupabase(url, headers, tamanoPagina){
 }
 
 async function obtenerTodosLosRegistros(){
-  const url = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,tipo,ot,placa,vin,marca,servicio,estado,hora_inicio_lavado,created_at,foto_ingreso,foto_ot,foto_vin,foto_final&order=created_at.desc";
+  const url = SUPABASE_URL + "/rest/v1/vehiculos_wankamotors?select=id,tipo,ot,placa,vin,marca,servicio,estado,hora_inicio_lavado,created_at,foto_ingreso,foto_ot,foto_vin,foto_final,observaciones,observaciones_finales&order=created_at.desc";
   return await fetchTodosLosRegistrosSupabase(url, {
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + SUPABASE_KEY
@@ -4953,6 +4953,7 @@ function renderizarRegistrosPasadosPaginados(){
       <div><strong>Fecha ingreso / lavado:</strong> ${esc(formatearFechaHoraRegularizacion(r.hora_inicio_lavado)||"—")}</div>
       <div><strong>Servicio:</strong> ${esc(r.servicio||"—")}</div>
       <div><strong>Marca:</strong> ${esc(r.marca||"—")}</div>
+      ${renderObservacionesRegistroPasado(r)}
       ${renderFotosRegistroPasado(r)}
       <div style="margin-top:12px;"><button type="button" class="btn btn-primary" onclick="seleccionarRegistroPasado('${esc(r.id)}')">✏️ Seleccionar para editar</button></div>
     </div>`;}).join("");
@@ -5290,6 +5291,28 @@ function urlMiniaturaDrive(url){
     if(matchFile) id = matchFile[1];
   }
   return id ? "https://drive.google.com/thumbnail?id=" + encodeURIComponent(id) + "&sz=w500" : texto;
+}
+
+function renderObservacionesRegistroPasado(r){
+  const observaciones = [
+    { etiqueta: "Observaciones", texto: r.observaciones },
+    { etiqueta: "Observaciones finales", texto: r.observaciones_finales }
+  ].filter(function(item){
+    return item.texto !== null && item.texto !== undefined && String(item.texto).trim() !== "";
+  });
+
+  if(!observaciones.length) return "";
+
+  return `
+    <div style="margin-top:12px;padding:10px 12px;border:1px solid #dbeafe;border-radius:8px;background:#eff6ff;">
+      ${observaciones.map(function(item){
+        return `
+          <div style="${observaciones.length > 1 ? 'margin-bottom:8px;' : ''}">
+            <strong>📝 ${esc(item.etiqueta)}:</strong>
+            <div style="margin-top:4px;color:#334155;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45;">${esc(String(item.texto))}</div>
+          </div>`;
+      }).join("")}
+    </div>`;
 }
 
 function renderFotosRegistroPasado(r){
@@ -11310,7 +11333,7 @@ programarCierreAutomatico1930();
 </script>
 
 
-<div class="version-app">V5.5 Dashboard</div>
+<div class="version-app">V5.8 Dashboard</div>
 
 <!-- =====================================================
      MODAL DE COINCIDENCIA / DUPLICADO
